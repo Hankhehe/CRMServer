@@ -184,6 +184,23 @@ def dashboard(request):
         .exclude(license_type=CustomerLicense.TYPE_PERPETUAL)
     )
 
+    from apps.orders.models import Order
+    from django.db.models import Sum
+    from decimal import Decimal
+    visible_orders = filter_by_customer_scope(
+        request.user, Order.objects.select_related("customer", "salesperson").prefetch_related("payments"), customer_lookup="customer"
+    )
+    pending_payment_orders = visible_orders.filter(status=Order.STATUS_PENDING_PAYMENT).order_by("shipped_at", "id")
+    pending_payment_orders_count = pending_payment_orders.count()
+    pending_payment_orders_total = pending_payment_orders.aggregate(s=Sum("total_amount"))["s"] or Decimal("0")
+    order_pipeline_alerts = visible_orders.filter(
+        status__in=[
+            Order.STATUS_PENDING_APPROVAL,
+            Order.STATUS_PENDING_SHIPMENT,
+            Order.STATUS_PENDING_PAYMENT,
+        ]
+    ).order_by("-updated_at")[:8]
+
     return render(
         request,
         "core/dashboard.html",
@@ -201,6 +218,9 @@ def dashboard(request):
             "loaned_probes": loaned_probes[:6],
             "loaned_count": loaned_probes.count(),
             "recent_transactions": recent_transactions,
+            "pending_payment_orders_count": pending_payment_orders_count,
+            "pending_payment_orders_total": pending_payment_orders_total,
+            "order_pipeline_alerts": order_pipeline_alerts,
             "can_edit_probe": user_can_edit_probe(request.user),
             "can_edit_hardware": user_can_edit_probe(request.user),
             "can_edit_customers": user_can_edit_customers(request.user),
@@ -530,12 +550,18 @@ def role_update(request, pk):
                 p.can_edit_probes = role.can_edit_probes
                 p.can_manage_system = role.can_manage_system
                 p.can_edit_crm = role.can_edit_customers and role.can_edit_licenses
+                p.can_edit_orders = role.can_edit_orders
+                p.can_ship_orders = role.can_ship_orders
                 if role.can_approve_licenses or p.user.is_superuser:
                     p.can_approve_licenses = True
                 if role.can_approve_contracts or p.user.is_superuser:
                     p.can_approve_contracts = True
                 if role.can_approve_hardware or p.user.is_superuser:
                     p.can_approve_hardware = True
+                if role.can_approve_orders or p.user.is_superuser:
+                    p.can_approve_orders = True
+                if role.can_close_orders or p.user.is_superuser:
+                    p.can_close_orders = True
                 p.save()
 
             log_action(

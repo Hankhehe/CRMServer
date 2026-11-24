@@ -70,6 +70,9 @@ def user_can_view_crm(user: AbstractBaseUser) -> bool:
         or profile.has_license_edit_access
         or profile.has_product_edit_access
         or profile.has_system_manage_access
+        or profile.has_order_edit_access
+        or profile.has_order_approve_access
+        or profile.has_order_close_access
     ):
         return True
 
@@ -80,6 +83,9 @@ def user_can_view_crm(user: AbstractBaseUser) -> bool:
         UserProfile.ROLE_CUSTOMER_ADMIN,
         UserProfile.ROLE_LICENSE_ADMIN,
         UserProfile.ROLE_PROBE,
+        UserProfile.ROLE_SALES_REP,
+        UserProfile.ROLE_SALES_MANAGER,
+        UserProfile.ROLE_FINANCE,
         UserProfile.ROLE_VIEW,
         UserProfile.ROLE_CRM,
     }
@@ -292,6 +298,75 @@ def is_hardware_approval_required_for_user(user: AbstractBaseUser) -> bool:
     return not user_can_approve_hardware(user)
 
 
+def user_can_edit_orders(user: AbstractBaseUser) -> bool:
+    """檢查是否擁有建立/編輯訂單、報價單及回報收款權限（業務）"""
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser or getattr(user, "is_staff", False):
+        return True
+    profile = get_user_profile(user)
+    if profile:
+        if profile.has_order_edit_access:
+            return True
+        ad_roles = _get_user_ad_matched_roles(profile)
+        if ad_roles & {
+            OuPermission.ROLE_ALL,
+            OuPermission.ROLE_CRM,
+            UserProfile.ROLE_SALES_REP,
+            UserProfile.ROLE_SALES_MANAGER,
+        }:
+            return True
+    return False
+
+
+def user_can_approve_orders(user: AbstractBaseUser) -> bool:
+    """檢查是否擁有審核訂單並核准開立授權/保固之權限（業務主管）"""
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser or getattr(user, "is_staff", False):
+        return True
+    profile = get_user_profile(user)
+    if profile:
+        if profile.has_order_approve_access:
+            return True
+        ad_roles = _get_user_ad_matched_roles(profile)
+        if ad_roles & {OuPermission.ROLE_ALL, UserProfile.ROLE_SALES_MANAGER}:
+            return True
+    return False
+
+
+def user_can_ship_orders(user: AbstractBaseUser) -> bool:
+    """檢查是否擁有執行訂單檢查與硬體出貨交付之權限（工程師/庫存人員）"""
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser or getattr(user, "is_staff", False):
+        return True
+    profile = get_user_profile(user)
+    if profile:
+        if profile.has_order_ship_access:
+            return True
+        ad_roles = _get_user_ad_matched_roles(profile)
+        if ad_roles & {OuPermission.ROLE_ALL, OuPermission.ROLE_PROBE}:
+            return True
+    return False
+
+
+def user_can_close_orders(user: AbstractBaseUser) -> bool:
+    """檢查是否擁有確認訂單款項入帳並將訂單結案之權限（管理部/財務）"""
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser or getattr(user, "is_staff", False):
+        return True
+    profile = get_user_profile(user)
+    if profile:
+        if profile.has_order_close_access:
+            return True
+        ad_roles = _get_user_ad_matched_roles(profile)
+        if ad_roles & {OuPermission.ROLE_ALL, UserProfile.ROLE_FINANCE}:
+            return True
+    return False
+
+
 def user_can_edit(user: AbstractBaseUser) -> bool:
     """相容性輔助函式：若有任一模組編輯權限則為 True"""
     return (
@@ -299,6 +374,7 @@ def user_can_edit(user: AbstractBaseUser) -> bool:
         or user_can_edit_licenses(user)
         or user_can_edit_products(user)
         or user_can_edit_hardware(user)
+        or user_can_edit_orders(user)
         or user_can_manage_system(user)
     )
 

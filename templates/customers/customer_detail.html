@@ -615,6 +615,74 @@
   </div>
 </div>
 
+<!-- Customer Orders & Quotations Panel -->
+<div class="card collapsible-card" id="card-orders" style="margin-bottom: 1.5rem;">
+  <div class="card-header collapsible-header">
+    <div class="card-title">
+      <i class="fa-solid fa-file-invoice-dollar" style="color: #2563eb;"></i>
+      客戶訂單與報價收款紀錄
+      <span class="badge badge-secondary" style="margin-left: 6px;">{{ customer_orders|length }}</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 0.5rem;">
+      {% if can_edit_orders %}
+        <a href="{% url 'order-create' %}?customer={{ customer.pk }}" class="btn btn-primary btn-sm">
+          <i class="fa-solid fa-plus"></i> 新增此客戶訂單
+        </a>
+      {% endif %}
+      <button type="button" class="card-collapse-btn" aria-label="收合/展開" title="收合/展開" aria-expanded="true">
+        <i class="fa-solid fa-chevron-up"></i>
+      </button>
+    </div>
+  </div>
+  <div class="card-body">
+    {% if customer_orders %}
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>訂單單號</th>
+              <th>版次</th>
+              <th>專案主旨</th>
+              <th>流程狀態</th>
+              <th>應收總額</th>
+              <th>尚欠餘額</th>
+              <th>報價日期</th>
+              <th style="text-align: right;">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for ord in customer_orders %}
+              <tr>
+                <td>
+                  <a href="{% url 'order-detail' ord.pk %}" style="font-family: monospace; font-weight: 700; color: var(--primary); text-decoration: none;">
+                    {{ ord.order_no }}
+                  </a>
+                </td>
+                <td><span class="badge badge-secondary">v{{ ord.current_version }}</span></td>
+                <td style="font-weight: 600;">{{ ord.title }}</td>
+                <td><span class="badge {{ ord.badge_class }}">{{ ord.get_status_display }}</span></td>
+                <td>NT$ {{ ord.total_amount|floatformat:0 }}</td>
+                <td style="color: {% if ord.unpaid_balance > 0 %}#dc2626{% else %}#059669{% endif %}; font-weight: 600;">
+                  NT$ {{ ord.unpaid_balance|floatformat:0 }}
+                </td>
+                <td>{{ ord.quote_date|date:"Y-m-d" }}</td>
+                <td style="text-align: right; white-space: nowrap;">
+                  <a href="{% url 'order-detail' ord.pk %}" class="btn btn-outline btn-sm">詳情</a>
+                  <a href="{% url 'order-quotation-print' ord.pk %}" target="_blank" class="btn btn-outline btn-sm">報價單</a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div style="padding: 1.5rem; text-align: center; color: var(--text-muted);">
+        此客戶尚無建立任何訂單或報價紀錄
+      </div>
+    {% endif %}
+  </div>
+</div>
+
 <!-- Software Licenses Panel -->
 <div class="card collapsible-card" id="card-licenses">
   <div class="card-header collapsible-header">

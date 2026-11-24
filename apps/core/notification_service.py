@@ -503,3 +503,140 @@ def notify_approval_decision(
             t.start()
 
     return recipient_emails
+
+
+def notify_order_workflow_event(
+    order,
+    event_type: str,
+    actor,
+    target_roles: list[str],
+    event_title: str,
+    event_detail: str = "",
+    badge_text: str = "",
+    header_color: str = "#4f46e5",
+    sync: bool = False,
+) -> list[str]:
+    """
+    訂單流程跨角色 SMTP Email 通知：
+    依據 target_roles 自動篩選對應職責且可存取該客戶、開啟通知總開關之使用者（排除操作者本人）。
+    """
+    if not order:
+        return []
+
+    from django.contrib.auth import get_user_model
+    from .permissions import (
+        user_can_approve_orders,
+        user_can_ship_orders,
+        user_can_close_orders,
+        user_can_access_customer,
+    )
+
+    User = get_user_model()
+    customer = getattr(order, "customer", None)
+    recipient_emails: list[str] = []
+
+    def _add_user_if_eligible(u):
+        if not u or not getattr(u, "is_active", False):
+            return
+        if actor and getattr(actor, "is_authenticated", False) and u.pk == actor.pk:
+            return
+        email_addr = (u.email or "").strip()
+        if not email_addr:
+            return
+        profile, _ = UserProfile.objects.get_or_create(user=u)
+        if not profile.receive_email_notifications:
+            return
+        if email_addr not in recipient_emails:
+            recipient_emails.append(email_addr)
+
+    if "salesperson" in target_roles:
+        _add_user_if_eligible(getattr(order, "salesperson", None))
+        _add_user_if_eligible(getattr(order, "created_by", None))
+
+    role_checks = set(target_roles) - {"salesperson"}
+    if role_checks:
+        active_users = User.objects.filter(is_active=True).select_related("profile", "profile__role_obj")
+        for u in active_users:
+            matched = False
+            if "approver" in role_checks and user_can_approve_orders(u):
+                if not customer or user_can_access_customer(u, customer):
+                    matched = True
+            if "engineer" in role_checks and user_can_ship_orders(u):
+                matched = True
+            if "finance" in role_checks and user_can_close_orders(u):
+                matched = True
+            if matched:
+                _add_user_if_eligible(u)
+
+    if not recipient_emails:
+        return []
+
+    cfg = _get_smtp_config()
+    now_str = datetime.now(TAIPEI_TZ).strftime("%Y-%m-%d %H:%M:%S")
+    actor_name = "系統"
+    if actor and getattr(actor, "is_authenticated", False):
+        full_name = actor.get_full_name()
+        actor_name = f"{full_name} ({actor.username})" if full_name else actor.username
+
+    cust_display = f"{customer.name} ({customer.code})" if customer else "-"
+    order_path = reverse("order-detail", kwargs={"pk": order.pk})
+    order_url = f"{cfg['site_base_url']}{order_path}"
+    status_display = order.get_status_display()
+    badge_label = badge_text or status_display
+
+    subject = f"[CRM 訂單流程] {order.order_no} ({customer.name if customer else ''}) - {event_title}"
+    text_body = (
+        f"您好，\n\n"
+        f"客戶訂單「{order.order_no} - {order.title}」有新的流程動態：\n\n"
+        f"【通知事件】{event_title}\n"
+        f"【當前狀態】{status_display}\n"
+        f"【採購客戶】{cust_display}\n"
+        f"【訂單金額】NT$ {int(order.total_amount or 0):,}\n"
+        f"【操作人員】{actor_name}\n"
+        f"【發生時間】{now_str} (Asia/Taipei)\n"
+        f"【詳細說明】\n{event_detail or '-'}\n\n"
+        f"👉 點此前往處理訂單：{order_url}\n"
+    )
+    html_body = f"""
+    <div style="font-family: 'Inter', 'Microsoft JhengHei', sans-serif; max-width: 640px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background: #ffffff;">
+      <div style="background: {escape(header_color)}; color: #ffffff; padding: 16px 24px; font-size: 17px; font-weight: 700;">
+        CRM 訂單與收款管控通知 - {escape(event_title)}
+      </div>
+      <div style="padding: 24px; color: #0f172a; line-height: 1.65;">
+        <div style="margin-bottom: 14px;">
+          <span style="display: inline-block; background: #eef2ff; color: #3730a3; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 9999px;">
+            {escape(badge_label)}
+          </span>
+        </div>
+        <h2 style="font-size: 18px; margin: 0 0 12px 0; color: #0f172a;">
+          {escape(order.order_no)} <span style="font-size: 14px; color: #64748b; font-weight: 500;">— {escape(order.title)}</span>
+        </h2>
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; margin-bottom: 20px; font-size: 14px;">
+          <div style="margin-bottom: 6px;"><strong>採購客戶：</strong> {escape(cust_display)}</div>
+          <div style="margin-bottom: 6px;"><strong>訂單總額：</strong> NT$ {int(order.total_amount or 0):,}</div>
+          <div style="margin-bottom: 6px;"><strong>操作同仁：</strong> {escape(actor_name)}</div>
+          <div style="margin-bottom: 10px;"><strong>發生時間：</strong> {escape(now_str)}</div>
+          <div style="border-top: 1px dashed #cbd5e1; padding-top: 10px; white-space: pre-wrap; color: #334155;">{escape(event_detail or '-')}</div>
+        </div>
+        <div style="margin-top: 20px;">
+          <a href="{escape(order_url)}" style="display: inline-block; background: {escape(header_color)}; color: #ffffff; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; font-size: 14px;">
+            前往檢視與處理訂單
+          </a>
+        </div>
+      </div>
+    </div>
+    """
+
+    if cfg["host"]:
+        cust_code = customer.code if customer else order.order_no
+        if sync:
+            _send_emails_worker(subject, text_body, html_body, recipient_emails, cust_code, event_title)
+        else:
+            t = threading.Thread(
+                target=_send_emails_worker,
+                args=(subject, text_body, html_body, recipient_emails, cust_code, event_title),
+                daemon=True,
+            )
+            t.start()
+
+    return recipient_emails

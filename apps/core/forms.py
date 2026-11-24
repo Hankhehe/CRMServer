@@ -180,6 +180,10 @@ class RoleForm(forms.ModelForm):
             "can_approve_licenses",
             "can_approve_contracts",
             "can_approve_hardware",
+            "can_edit_orders",
+            "can_approve_orders",
+            "can_ship_orders",
+            "can_close_orders",
         ]
         widgets = {
             "name": forms.TextInput(attrs={"class": "form-control", "placeholder": "例如: 業務技術主管"}),
@@ -195,6 +199,10 @@ class RoleForm(forms.ModelForm):
             "can_approve_licenses": forms.CheckboxInput(attrs={"id": "id_can_approve_licenses", "style": "margin-right: 8px;"}),
             "can_approve_contracts": forms.CheckboxInput(attrs={"id": "id_can_approve_contracts", "style": "margin-right: 8px;"}),
             "can_approve_hardware": forms.CheckboxInput(attrs={"id": "id_can_approve_hardware", "style": "margin-right: 8px;"}),
+            "can_edit_orders": forms.CheckboxInput(attrs={"id": "id_can_edit_orders", "style": "margin-right: 8px;"}),
+            "can_approve_orders": forms.CheckboxInput(attrs={"id": "id_can_approve_orders", "style": "margin-right: 8px;"}),
+            "can_ship_orders": forms.CheckboxInput(attrs={"id": "id_can_ship_orders", "style": "margin-right: 8px;"}),
+            "can_close_orders": forms.CheckboxInput(attrs={"id": "id_can_close_orders", "style": "margin-right: 8px;"}),
         }
 
     def clean_code(self):
@@ -241,6 +249,18 @@ class LocalUserCreationForm(UserCreationForm):
         required=False,
         initial=False,
         widget=forms.CheckboxInput(attrs={"style": "margin-right: 8px;", "id": "id_can_approve_hardware"}),
+    )
+    can_approve_orders = forms.BooleanField(
+        label="可審核「客戶訂單」並核准開單 (業務主管)",
+        required=False,
+        initial=False,
+        widget=forms.CheckboxInput(attrs={"style": "margin-right: 8px;", "id": "id_can_approve_orders"}),
+    )
+    can_close_orders = forms.BooleanField(
+        label="可確認訂單款項入帳與結案 (管理部)",
+        required=False,
+        initial=False,
+        widget=forms.CheckboxInput(attrs={"style": "margin-right: 8px;", "id": "id_can_close_orders"}),
     )
 
     class Meta(UserCreationForm.Meta):
@@ -303,6 +323,22 @@ class LocalUserCreationForm(UserCreationForm):
                         or (role_obj and role_obj.can_approve_hardware)
                         or user.is_superuser
                     ),
+                    "can_edit_orders": bool(
+                        (role_obj and role_obj.can_edit_orders) or user.is_superuser
+                    ),
+                    "can_approve_orders": bool(
+                        self.cleaned_data.get("can_approve_orders")
+                        or (role_obj and role_obj.can_approve_orders)
+                        or user.is_superuser
+                    ),
+                    "can_ship_orders": bool(
+                        (role_obj and role_obj.can_ship_orders) or user.is_superuser
+                    ),
+                    "can_close_orders": bool(
+                        self.cleaned_data.get("can_close_orders")
+                        or (role_obj and role_obj.can_close_orders)
+                        or user.is_superuser
+                    ),
                 },
             )
             user.profile = profile
@@ -337,6 +373,16 @@ class LocalUserEditForm(forms.ModelForm):
         required=False,
         widget=forms.CheckboxInput(attrs={"style": "margin-right: 8px;", "id": "id_can_approve_hardware"}),
     )
+    can_approve_orders = forms.BooleanField(
+        label="可審核「客戶訂單」並核准開單 (業務主管)",
+        required=False,
+        widget=forms.CheckboxInput(attrs={"style": "margin-right: 8px;", "id": "id_can_approve_orders"}),
+    )
+    can_close_orders = forms.BooleanField(
+        label="可確認訂單款項入帳與結案 (管理部)",
+        required=False,
+        widget=forms.CheckboxInput(attrs={"style": "margin-right: 8px;", "id": "id_can_close_orders"}),
+    )
 
     class Meta:
         model = User
@@ -355,6 +401,8 @@ class LocalUserEditForm(forms.ModelForm):
             self.fields["can_approve_licenses"].initial = p.has_license_approve_access
             self.fields["can_approve_contracts"].initial = p.has_contract_approve_access
             self.fields["can_approve_hardware"].initial = p.has_hardware_approve_access
+            self.fields["can_approve_orders"].initial = p.has_order_approve_access
+            self.fields["can_close_orders"].initial = p.has_order_close_access
 
     def save(self, commit=True):
         user = super().save(commit=commit)
@@ -376,6 +424,10 @@ class LocalUserEditForm(forms.ModelForm):
             profile.can_approve_licenses = bool(self.cleaned_data.get("can_approve_licenses") or user.is_superuser)
             profile.can_approve_contracts = bool(self.cleaned_data.get("can_approve_contracts") or user.is_superuser)
             profile.can_approve_hardware = bool(self.cleaned_data.get("can_approve_hardware") or user.is_superuser)
+            profile.can_edit_orders = bool(role_obj.can_edit_orders or user.is_superuser)
+            profile.can_approve_orders = bool(self.cleaned_data.get("can_approve_orders") or role_obj.can_approve_orders or user.is_superuser)
+            profile.can_ship_orders = bool(role_obj.can_ship_orders or user.is_superuser)
+            profile.can_close_orders = bool(self.cleaned_data.get("can_close_orders") or role_obj.can_close_orders or user.is_superuser)
             profile.save()
             user.profile = profile
         return user

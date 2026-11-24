@@ -152,6 +152,14 @@ class HardwareDevice(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="建立時間")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="最後更新")
     is_deleted = models.BooleanField(default=False, verbose_name="已刪除")
+    source_order = models.ForeignKey(
+        "orders.Order",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="shipped_devices",
+        verbose_name="出貨來源訂單",
+    )
 
     class Meta:
         ordering = ["code"]
@@ -489,6 +497,14 @@ class InventoryTransaction(models.Model):
         blank=True,
         related_name="inventory_transactions",
         verbose_name="經手人員",
+    )
+    source_order = models.ForeignKey(
+        "orders.Order",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="inventory_transactions",
+        verbose_name="關聯訂單",
     )
 
     class Meta:

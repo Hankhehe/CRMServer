@@ -519,7 +519,16 @@
 
       {% if can_view_crm %}
       <!-- 👥 CRM & 合約管理分區 -->
-      <div class="nav-section-title">CRM 客戶與維護合約</div>
+      <div class="nav-section-title">CRM 客戶與訂單流程</div>
+      <a class="nav-link {% if 'order' in request.resolver_match.url_name and 'quotation-setting' not in request.resolver_match.url_name %}active{% endif %}" href="{% url 'order-list' %}" data-tooltip="訂單與報價管理">
+        <i class="fa-solid fa-file-invoice-dollar"></i>
+        <span class="nav-text" style="display: flex; align-items: center; justify-content: space-between; flex: 1;">
+          <span>訂單與報價管理</span>
+          {% if nav_actionable_orders_count > 0 %}
+            <span style="background: #ef4444; color: #fff; font-size: 0.7rem; font-weight: 700; padding: 1px 6px; border-radius: 999px; margin-left: 6px;" title="有 {{ nav_actionable_orders_count }} 筆訂單待您處理">{{ nav_actionable_orders_count }}</span>
+          {% endif %}
+        </span>
+      </a>
       <a class="nav-link {% if 'customer' in request.resolver_match.url_name and 'contract' not in request.resolver_match.url_name and request.resolver_match.url_name != 'customer-custom-fields' %}active{% endif %}" href="{% url 'customer-list' %}" data-tooltip="客戶名冊">
         <i class="fa-solid fa-building-user"></i>
         <span class="nav-text">客戶名冊</span>
@@ -603,6 +612,10 @@
       <a class="nav-link {% if 'cert-template' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'cert-template-settings' %}" data-tooltip="證書底圖範本">
         <i class="fa-solid fa-award"></i>
         <span class="nav-text">證書底圖範本</span>
+      </a>
+      <a class="nav-link {% if 'quotation-settings' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'quotation-settings' %}" data-tooltip="報價單賣方範本">
+        <i class="fa-solid fa-file-signature"></i>
+        <span class="nav-text">報價單賣方範本</span>
       </a>
       <a class="nav-link {% if 'audit' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'audit-log-list' %}" data-tooltip="審計日誌">
         <i class="fa-solid fa-list-check"></i>

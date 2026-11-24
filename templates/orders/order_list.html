@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% load crm_tags %}
+
+{% block title %}訂單與報價收款管理 - CRM Server{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+  <div>
+    <h1 style="font-size: 1.75rem; font-weight: 700; margin-bottom: 0.25rem;">
+      <i class="fa-solid fa-file-invoice-dollar" style="color: var(--primary);"></i> 訂單與報價收款管理
+    </h1>
+    <p style="color: var(--text-muted); font-size: 0.95rem;">
+      統一管控報價議價留存、主管審核開單、工程師出貨交付與管理部入帳結案追蹤
+    </p>
+  </div>
+  <div style="display: flex; gap: 0.65rem; flex-wrap: wrap;">
+    {% if can_manage_system or can_approve_orders %}
+      <a href="{% url 'quotation-settings' %}" class="btn btn-outline">
+        <i class="fa-solid fa-building"></i> 賣方報價範本設定
+      </a>
+    {% endif %}
+    <a href="{% url 'order-export' %}?q={{ query|urlencode }}&status={{ status_filter|urlencode }}" class="btn btn-outline">
+      <i class="fa-solid fa-file-excel" style="color: #059669;"></i> 匯出 Excel
+    </a>
+    {% if can_edit_orders %}
+      <a href="{% url 'order-create' %}" class="btn btn-primary">
+        <i class="fa-solid fa-plus"></i> 建立新訂單 / 報價單
+      </a>
+    {% endif %}
+  </div>
+</div>
+
+<!-- 狀態快速篩選與待收款KPI摘要 -->
+<div style="display: grid; grid-template-columns: 1fr auto; gap: 1rem; margin-bottom: 1.25rem; align-items: stretch;">
+  <div class="card" style="margin-bottom: 0; padding: 0.9rem 1.15rem; display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: center;">
+    <a href="{% url 'order-list' %}{% if query %}?q={{ query|urlencode }}{% endif %}" class="btn btn-sm {% if not status_filter %}btn-primary{% else %}btn-outline{% endif %}">
+      全部 ({{ all_count }})
+    </a>
+    <a href="?status=draft{% if query %}&q={{ query|urlencode }}{% endif %}" class="btn btn-sm {% if status_filter == 'draft' %}btn-primary{% else %}btn-outline{% endif %}">
+      草稿/議價 ({{ status_counts.draft|default:0 }})
+    </a>
+    <a href="?status=pending_approval{% if query %}&q={{ query|urlencode }}{% endif %}" class="btn btn-sm {% if status_filter == 'pending_approval' %}btn-primary{% else %}btn-outline{% endif %}" {% if status_counts.pending_approval %}style="border-color: #f59e0b; color: {% if status_filter == 'pending_approval' %}#fff{% else %}#b45309{% endif %};"{% endif %}>
+      待主管審核 ({{ status_counts.pending_approval|default:0 }})
+    </a>
+    <a href="?status=rejected{% if query %}&q={{ query|urlencode }}{% endif %}" class="btn btn-sm {% if status_filter == 'rejected' %}btn-primary{% else %}btn-outline{% endif %}">
+      退回修正 ({{ status_counts.rejected|default:0 }})
+    </a>
+    <a href="?status=pending_shipment{% if query %}&q={{ query|urlencode }}{% endif %}" class="btn btn-sm {% if status_filter == 'pending_shipment' %}btn-primary{% else %}btn-outline{% endif %}" {% if status_counts.pending_shipment %}style="border-color: #7c3aed; color: {% if status_filter == 'pending_shipment' %}#fff{% else %}#6d28d9{% endif %};"{% endif %}>
+      待出貨/交付 ({{ status_counts.pending_shipment|default:0 }})
+    </a>
+    <a href="?status=pending_payment{% if query %}&q={{ query|urlencode }}{% endif %}" class="btn btn-sm {% if status_filter == 'pending_payment' %}btn-primary{% else %}btn-outline{% endif %}" {% if status_counts.pending_payment %}style="border-color: #2563eb; color: {% if status_filter == 'pending_payment' %}#fff{% else %}#1d4ed8{% endif %};"{% endif %}>
+      待收款 ({{ status_counts.pending_payment|default:0 }})
+    </a>
+    <a href="?status=payment_review{% if query %}&q={{ query|urlencode }}{% endif %}" class="btn btn-sm {% if status_filter == 'payment_review' %}btn-primary{% else %}btn-outline{% endif %}" {% if pending_payment_review_count %}style="border-color: #0284c7; color: {% if status_filter == 'payment_review' %}#fff{% else %}#0369a1{% endif %};"{% endif %}>
+      待入帳確認 ({{ pending_payment_review_count }})
+    </a>
+    <a href="?status=closed{% if query %}&q={{ query|urlencode }}{% endif %}" class="btn btn-sm {% if status_filter == 'closed' %}btn-primary{% else %}btn-outline{% endif %}">
+      已結案 ({{ status_counts.closed|default:0 }})
+    </a>
+    <a href="?status=cancelled{% if query %}&q={{ query|urlencode }}{% endif %}" class="btn btn-sm {% if status_filter == 'cancelled' %}btn-primary{% else %}btn-outline{% endif %}">
+      已作廢 ({{ status_counts.cancelled|default:0 }})
+    </a>
+  </div>
+
+  <div class="card" style="margin-bottom: 0; padding: 0.85rem 1.35rem; background: linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(79, 70, 229, 0.08)); border-color: rgba(59, 130, 246, 0.25); display: flex; flex-direction: column; justify-content: center; min-width: 220px;">
+    <div style="font-size: 0.78rem; font-weight: 600; color: #1e40af;">待收款訂單總金額</div>
+    <div style="font-size: 1.35rem; font-weight: 700; color: #1d4ed8;">NT$ {{ pending_payment_total|floatformat:0 }}</div>
+  </div>
+</div>
+
+<!-- 搜尋列 -->
+<div class="card" style="margin-bottom: 1.5rem; padding: 1rem 1.25rem;">
+  <form method="get" style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center;">
+    {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}">{% endif %}
+    <div style="flex: 1; min-width: 240px; position: relative;">
+      <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 0.9rem; top: 50%; transform: translateY(-50%); color: var(--text-muted);"></i>
+      <input type="text" name="q" value="{{ query }}" class="form-control" style="padding-left: 2.35rem;" placeholder="搜尋訂單單號、專案主旨、客戶名稱/代號、業務人員...">
+    </div>
+    <button type="submit" class="btn btn-primary"><i class="fa-solid fa-search"></i> 搜尋</button>
+    {% if query or status_filter %}
+      <a href="{% url 'order-list' %}" class="btn btn-outline">清除條件</a>
+    {% endif %}
+  </form>
+</div>
+
+<!-- 訂單清單表 -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">
+      訂單清單 <span class="badge badge-secondary" style="margin-left: 6px;">共 {{ total_count }} 筆</span>
+    </div>
+  </div>
+  {% if page_obj.object_list %}
+    <div class="table-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th>{% sort_link "order_no" "訂單單號" %}</th>
+            <th>客戶 / 專案主旨</th>
+            <th>版次</th>
+            <th>狀態</th>
+            <th>{% sort_link "total_amount" "應收總額" %}</th>
+            <th>已入帳 / 餘額</th>
+            <th>負責業務</th>
+            <th>{% sort_link "quote_date" "報價日期" %}</th>
+            <th style="text-align: right;">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for o in page_obj %}
+            <tr>
+              <td style="white-space: nowrap;">
+                <a href="{% url 'order-detail' o.pk %}" style="font-family: monospace; font-weight: 700; color: var(--primary); text-decoration: none; font-size: 0.95rem;">
+                  {{ o.order_no }}
+                </a>
+                {% if o.has_pending_payment_review %}
+                  <div style="margin-top: 2px;">
+                    <span class="badge badge-loaned" style="font-size: 0.7rem;"><i class="fa-solid fa-coins"></i> 有款項待確認</span>
+                  </div>
+                {% endif %}
+              </td>
+              <td>
+                <div style="font-weight: 600; color: var(--text-main);">{{ o.title }}</div>
+                <div style="font-size: 0.8rem; color: var(--text-muted);">
+                  <a href="{% url 'customer-detail' o.customer.pk %}" style="color: var(--text-muted); text-decoration: none;">
+                    [{{ o.customer.code }}] {{ o.customer.name }}
+                  </a>
+                </div>
+              </td>
+              <td><span class="badge badge-secondary" style="font-family: monospace;">v{{ o.current_version }}</span></td>
+              <td><span class="badge {{ o.badge_class }}">{{ o.get_status_display }}</span></td>
+              <td style="font-weight: 700; white-space: nowrap;">NT$ {{ o.total_amount|floatformat:0 }}</td>
+              <td style="font-size: 0.82rem; white-space: nowrap;">
+                <div style="color: #059669;">已收: NT$ {{ o.confirmed_paid_amount|floatformat:0 }}</div>
+                {% if o.status == 'pending_payment' or o.unpaid_balance > 0 %}
+                  <div style="color: {% if o.unpaid_balance > 0 %}#dc2626{% else %}var(--text-muted){% endif %}; font-weight: 600;">
+                    餘額: NT$ {{ o.unpaid_balance|floatformat:0 }}
+                  </div>
+                {% endif %}
+              </td>
+              <td>{{ o.salesperson.get_full_name|default:o.salesperson.username|default:"-" }}</td>
+              <td style="white-space: nowrap; font-size: 0.85rem;">{{ o.quote_date|date:"Y-m-d" }}</td>
+              <td style="text-align: right; white-space: nowrap;">
+                <a href="{% url 'order-detail' o.pk %}" class="btn btn-outline btn-sm" title="檢視與處理流程">
+                  <i class="fa-solid fa-eye"></i> 詳情
+                </a>
+                <a href="{% url 'order-quotation-print' o.pk %}" target="_blank" class="btn btn-outline btn-sm" title="開啟報價單列印">
+                  <i class="fa-solid fa-print"></i> 報價單
+                </a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if page_obj.has_other_pages %}
+      <div style="display: flex; justify-content: center; gap: 0.4rem; margin-top: 1.25rem;">
+        {% if page_obj.has_previous %}
+          <a href="{% page_url page_obj.previous_page_number %}" class="btn btn-outline btn-sm">上一頁</a>
+        {% endif %}
+        <span style="padding: 0.35rem 0.75rem; font-size: 0.875rem; color: var(--text-muted);">
+          第 {{ page_obj.number }} / {{ page_obj.paginator.num_pages }} 頁
+        </span>
+        {% if page_obj.has_next %}
+          <a href="{% page_url page_obj.next_page_number %}" class="btn btn-outline btn-sm">下一頁</a>
+        {% endif %}
+      </div>
+    {% endif %}
+  {% else %}
+    <div style="padding: 3rem; text-align: center; color: var(--text-muted);">
+      <i class="fa-solid fa-file-invoice-dollar fa-3x" style="color: #cbd5e1; margin-bottom: 0.75rem; display: block;"></i>
+      目前沒有符合條件的訂單資料
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

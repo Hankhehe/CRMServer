@@ -97,6 +97,18 @@
         </div>
       </div>
       <div style="grid-column: 1 / -1;">
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;">出貨來源訂單</div>
+        <div>
+          {% if probe.source_order %}
+            <a href="{% url 'order-detail' probe.source_order.pk %}" class="badge badge-shipped" style="text-decoration: none;">
+              <i class="fa-solid fa-file-invoice-dollar"></i> {{ probe.source_order.order_no }} ({{ probe.source_order.get_status_display }})
+            </a>
+          {% else %}
+            <span style="color: var(--text-muted); font-size: 0.85rem;">單獨出入庫 (無綁定訂單)</span>
+          {% endif %}
+        </div>
+      </div>
+      <div style="grid-column: 1 / -1;">
         <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;">關聯維護合約</div>
         <div>
           {% with contracts=probe.maintenance_contracts.all %}

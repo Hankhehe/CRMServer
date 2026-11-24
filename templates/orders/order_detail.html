@@ -1,0 +1,812 @@
+{% extends "base.html" %}
+
+{% block title %}{{ order.order_no }} - 訂單詳情 - CRM Server{% endblock %}
+
+{% block content %}
+<style>
+  .order-stepper {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+  @media (max-width: 768px) {
+    .order-stepper {
+      grid-template-columns: 1fr;
+    }
+  }
+  .stepper-step {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 0.75rem 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    position: relative;
+  }
+  .stepper-step.is-done {
+    background: rgba(16, 185, 129, 0.08);
+    border-color: rgba(16, 185, 129, 0.4);
+  }
+  .stepper-step.is-active {
+    background: rgba(79, 70, 229, 0.08);
+    border: 2px solid var(--primary);
+    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.12);
+  }
+  .stepper-num {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.85rem;
+    background: #e2e8f0;
+    color: #475569;
+    flex-shrink: 0;
+  }
+  .stepper-step.is-done .stepper-num {
+    background: #059669;
+    color: #ffffff;
+  }
+  .stepper-step.is-active .stepper-num {
+    background: var(--primary);
+    color: #ffffff;
+  }
+</style>
+
+<!-- Top Header -->
+<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 1rem;">
+  <div style="display: flex; align-items: center; gap: 1rem;">
+    <a href="{% url 'order-list' %}" class="btn btn-outline btn-sm">
+      <i class="fa-solid fa-arrow-left"></i> 回訂單列表
+    </a>
+    <div>
+      <div style="display: flex; align-items: center; gap: 0.65rem; flex-wrap: wrap;">
+        <h1 style="font-size: 1.65rem; font-weight: 700; margin: 0; font-family: monospace;">{{ order.order_no }}</h1>
+        <span class="badge badge-secondary" style="font-family: monospace;">v{{ order.current_version }}</span>
+        <span class="badge {{ order.badge_class }}">{{ order.get_status_display }}</span>
+      </div>
+      <div style="color: var(--text-muted); font-size: 0.92rem; margin-top: 0.2rem;">
+        {{ order.title }} ｜ 客戶：
+        <a href="{% url 'customer-detail' order.customer.pk %}" style="color: var(--primary); font-weight: 600; text-decoration: none;">
+          [{{ order.customer.code }}] {{ order.customer.name }}
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+    <a href="{% url 'order-quotation-print' order.pk %}" target="_blank" class="btn btn-outline">
+      <i class="fa-solid fa-print"></i> 列印 / 匯出報價單 (v{{ order.current_version }})
+    </a>
+    {% if order.is_editable_by_sales and can_edit_orders %}
+      <a href="{% url 'order-update' order.pk %}" class="btn btn-primary">
+        <i class="fa-solid fa-pen-to-square"></i> 修改金額 / 編輯明細
+      </a>
+    {% endif %}
+    {% if can_cancel_order %}
+      <button type="button" class="btn btn-danger btn-sm" onclick="document.getElementById('cancelOrderModal').style.display='flex'">
+        <i class="fa-solid fa-ban"></i> 作廢訂單
+      </button>
+    {% endif %}
+  </div>
+</div>
+
+<!-- 流程進度條 (Stepper) -->
+{% if order.status != 'cancelled' %}
+<div class="order-stepper">
+  <div class="stepper-step {% if order.status == 'draft' or order.status == 'rejected' %}is-active{% else %}is-done{% endif %}">
+    <div class="stepper-num">{% if order.status == 'draft' or order.status == 'rejected' %}1{% else %}<i class="fa-solid fa-check"></i>{% endif %}</div>
+    <div>
+      <div style="font-weight: 700; font-size: 0.85rem;">1. 報價與議價</div>
+      <div style="font-size: 0.72rem; color: var(--text-muted);">業務建單/上傳回簽</div>
+    </div>
+  </div>
+  <div class="stepper-step {% if order.status == 'pending_approval' %}is-active{% elif order.status == 'pending_shipment' or order.status == 'pending_payment' or order.status == 'closed' %}is-done{% endif %}">
+    <div class="stepper-num">{% if order.status == 'pending_shipment' or order.status == 'pending_payment' or order.status == 'closed' %}<i class="fa-solid fa-check"></i>{% else %}2{% endif %}</div>
+    <div>
+      <div style="font-weight: 700; font-size: 0.85rem;">2. 主管審核開單</div>
+      <div style="font-size: 0.72rem; color: var(--text-muted);">開立授權與保固</div>
+    </div>
+  </div>
+  <div class="stepper-step {% if order.status == 'pending_shipment' %}is-active{% elif order.status == 'pending_payment' or order.status == 'closed' %}is-done{% endif %}">
+    <div class="stepper-num">{% if order.status == 'pending_payment' or order.status == 'closed' %}<i class="fa-solid fa-check"></i>{% else %}3{% endif %}</div>
+    <div>
+      <div style="font-weight: 700; font-size: 0.85rem;">3. 工程師出貨交付</div>
+      <div style="font-size: 0.72rem; color: var(--text-muted);">硬體配貨與檢查</div>
+    </div>
+  </div>
+  <div class="stepper-step {% if order.status == 'pending_payment' %}is-active{% elif order.status == 'closed' %}is-done{% endif %}">
+    <div class="stepper-num">{% if order.status == 'closed' %}<i class="fa-solid fa-check"></i>{% else %}4{% endif %}</div>
+    <div>
+      <div style="font-weight: 700; font-size: 0.85rem;">4. 業務待收款</div>
+      <div style="font-size: 0.72rem; color: var(--text-muted);">收款回報管理部</div>
+    </div>
+  </div>
+  <div class="stepper-step {% if order.status == 'closed' %}is-done{% endif %}">
+    <div class="stepper-num">{% if order.status == 'closed' %}<i class="fa-solid fa-check"></i>{% else %}5{% endif %}</div>
+    <div>
+      <div style="font-weight: 700; font-size: 0.85rem;">5. 管理部結案</div>
+      <div style="font-size: 0.72rem; color: var(--text-muted);">確認入帳歸檔</div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- 狀態警示與提示條 -->
+{% if order.status == 'rejected' %}
+  <div class="card" style="border-left: 4px solid #dc2626; background: rgba(239, 68, 68, 0.08); margin-bottom: 1.5rem;">
+    <div style="font-weight: 700; color: #dc2626; margin-bottom: 0.3rem;">
+      <i class="fa-solid fa-circle-xmark"></i> 此訂單已被業務主管退回修正
+    </div>
+    <div style="color: #991b1b; font-size: 0.9rem;"><strong>退回原因：</strong>{{ order.rejection_reason }}</div>
+    <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem;">
+      覆核主管：{{ order.approved_by.username|default:"-" }} ｜ 退回時間：{{ order.approved_at|date:"Y-m-d H:i"|default:"-" }}
+    </div>
+  </div>
+{% elif order.status == 'cancelled' %}
+  <div class="card" style="border-left: 4px solid #475569; background: rgba(100, 116, 139, 0.08); margin-bottom: 1.5rem;">
+    <div style="font-weight: 700; color: #334155; margin-bottom: 0.3rem;">
+      <i class="fa-solid fa-ban"></i> 此訂單已作廢（關聯授權/保固與硬體已安全回收）
+    </div>
+    <div style="font-size: 0.9rem;"><strong>作廢原因：</strong>{{ order.cancel_reason }}</div>
+    <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem;">
+      作廢人員：{{ order.cancelled_by.username|default:"-" }} ｜ 作廢時間：{{ order.cancelled_at|date:"Y-m-d H:i"|default:"-" }}
+    </div>
+  </div>
+{% endif %}
+
+<!-- 階段專屬操作工作台 -->
+{% if order.is_editable_by_sales and can_edit_orders %}
+  <div class="card" style="border: 1px solid rgba(79, 70, 229, 0.3); background: rgba(79, 70, 229, 0.03); margin-bottom: 1.5rem;">
+    <div class="card-header">
+      <div class="card-title" style="color: var(--primary);"><i class="fa-solid fa-paper-plane"></i> 步驟 1~3：報價確認與送交業務主管審核</div>
+      {% if has_signed_quote %}
+        <span class="badge badge-available"><i class="fa-solid fa-check"></i> 已上傳客戶回簽報價單</span>
+      {% else %}
+        <span class="badge badge-loaned"><i class="fa-solid fa-circle-info"></i> 尚未上傳回簽報價單</span>
+      {% endif %}
+    </div>
+    <form method="post" action="{% url 'order-submit' order.pk %}">
+      {% csrf_token %}
+      {% if not has_signed_quote %}
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label style="font-weight: 600; color: #b45309;">
+            未附回簽報價單說明（若尚未取得客戶回簽掃描檔，請填寫說明方可直接送審；或請先於下方「佐證附件」上傳回簽報價單）：
+          </label>
+          <textarea name="no_signed_quote_reason" rows="2" class="form-control" placeholder="例如：急單已取得客戶窗口 Email 確認，回簽文件後補...">{{ order.no_signed_quote_reason }}</textarea>
+        </div>
+      {% else %}
+        <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 1rem;">
+          已確認附有客戶回簽報價單佐證附件。送交主管審核後，訂單金額與品項將會鎖定。
+        </p>
+      {% endif %}
+      <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center;">
+        <button type="submit" class="btn btn-primary" onclick="return confirm('確定將訂單「{{ order.order_no }}」送交業務主管審核嗎？送審後金額將鎖定。');">
+          <i class="fa-solid fa-stamp"></i> 送交業務主管審核
+        </button>
+        <a href="{% url 'order-update' order.pk %}" class="btn btn-outline">
+          <i class="fa-solid fa-pen"></i> 修改金額 / 調整品項
+        </a>
+      </div>
+    </form>
+  </div>
+{% endif %}
+
+{% if order.status == 'pending_approval' and can_approve_orders %}
+  <div class="card" style="border: 2px solid #f59e0b; background: rgba(245, 158, 11, 0.05); margin-bottom: 1.5rem;">
+    <div class="card-header">
+      <div class="card-title" style="color: #b45309;"><i class="fa-solid fa-gavel"></i> 業務主管審核工作台</div>
+    </div>
+    <div style="font-size: 0.9rem; margin-bottom: 1rem; line-height: 1.6;">
+      <div><strong>佐證檢查：</strong>
+        {% if has_signed_quote %}
+          <span class="badge badge-available">已附客戶回簽報價單附件</span>
+        {% else %}
+          <span class="badge badge-loaned">未附回簽單</span> — 業務說明：<strong>{{ order.no_signed_quote_reason|default:"(無)" }}</strong>
+        {% endif %}
+      </div>
+      <div style="color: var(--text-muted); margin-top: 0.35rem;">
+        核准後系統將自動依訂單明細開立對應「軟體授權書」與「維護保固合約」（免二次簽核），並將訂單推進至「待出貨 / 待交付」。
+      </div>
+    </div>
+    <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+      <form method="post" action="{% url 'order-approve' order.pk %}" onsubmit="return confirm('確定核准訂單「{{ order.order_no }}」並自動開立相關授權書與保固合約嗎？');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-primary" style="background: #059669; border-color: #059669;">
+          <i class="fa-solid fa-check-double"></i> 核准訂單並自動開立單據
+        </button>
+      </form>
+      <button type="button" class="btn btn-danger" onclick="document.getElementById('rejectOrderModal').style.display='flex'">
+        <i class="fa-solid fa-rotate-left"></i> 退回業務修正
+      </button>
+    </div>
+  </div>
+{% endif %}
+
+{% if order.status == 'pending_shipment' %}
+  <div class="card" style="border: 2px solid #7c3aed; background: rgba(124, 58, 237, 0.04); margin-bottom: 1.5rem;">
+    <div class="card-header">
+      <div class="card-title" style="color: #6d28d9;"><i class="fa-solid fa-truck-ramp-box"></i> 步驟 5：工程師檢查與出貨交付工作台</div>
+      <span class="badge badge-repair">待出貨 / 待交付</span>
+    </div>
+    {% if can_ship_orders %}
+      <form method="post" action="{% url 'order-ship' order.pk %}">
+        {% csrf_token %}
+        {% if hardware_pickers %}
+          <div style="margin-bottom: 1.25rem;">
+            <div style="font-weight: 700; margin-bottom: 0.65rem;">請挑選實際出庫的硬體設備序號 (SN)：</div>
+            {% for hp in hardware_pickers %}
+              <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1rem; margin-bottom: 0.75rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
+                  <div>
+                    <strong>{{ hp.item.name }}</strong>
+                    <span class="badge badge-secondary">{{ hp.item.hardware_model.name|default:"未指定型號" }}</span>
+                  </div>
+                  <div style="font-size: 0.85rem;">
+                    需求數量：<strong style="color: var(--primary);">{{ hp.item.quantity }}</strong> 台 ｜
+                    目前在庫：<strong style="color: {% if hp.is_sufficient %}#059669{% else %}#dc2626{% endif %};">{{ hp.available_count }}</strong> 台
+                  </div>
+                </div>
+                {% if hp.is_sufficient %}
+                  <div style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 0.4rem;">請勾選剛好 {{ hp.item.quantity }} 台設備序號：</div>
+                  <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.4rem; max-height: 200px; overflow-y: auto; padding: 0.5rem; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
+                    {% for dev in hp.available_devices %}
+                      <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; cursor: pointer; padding: 4px 6px; background: #fff; border-radius: 6px; border: 1px solid #e2e8f0;">
+                        <input type="checkbox" name="devices_item_{{ hp.item.pk }}" value="{{ dev.pk }}">
+                        <span style="font-family: monospace; font-weight: 700;">{{ dev.code }}</span>
+                      </label>
+                    {% endfor %}
+                  </div>
+                {% else %}
+                  <div style="color: #dc2626; font-size: 0.85rem; font-weight: 600;">
+                    <i class="fa-solid fa-triangle-exclamation"></i> 此型號目前在庫數量不足（需 {{ hp.item.quantity }} 台，僅餘 {{ hp.available_count }} 台），請先至硬體庫存模組進貨後再辦理出貨！
+                  </div>
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div style="background: #ffffff; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 0.85rem 1rem; margin-bottom: 1rem; font-size: 0.875rem; color: var(--text-muted);">
+            <i class="fa-solid fa-circle-info" style="color: #6d28d9;"></i> 本張訂單無需出庫實體硬體設備。請於確認軟體授權與保固交付條件無誤後點擊完成交付。
+          </div>
+        {% endif %}
+
+        {% if generated_licenses %}
+          <div style="margin-bottom: 1.25rem;">
+            <div style="font-weight: 700; margin-bottom: 0.5rem;">軟體授權金鑰補充 / 確認 (選填)：</div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.75rem;">
+              {% for lic in generated_licenses %}
+                <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.75rem;">
+                  <label style="font-size: 0.8rem; font-weight: 600; display: block; margin-bottom: 0.3rem;">
+                    {{ lic.license_no }} - {{ lic.product.name }}
+                  </label>
+                  <input type="text" name="license_key_{{ lic.pk }}" class="form-control" value="{{ lic.license_key }}" placeholder="填入授權金鑰 / 序號字串 (選填)">
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        {% endif %}
+
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label style="font-weight: 600;">工程師檢查與出貨交付備註 (選填)</label>
+          <input type="text" name="shipment_note" class="form-control" placeholder="例如：已完成燒機測試與序號貼標，宅配單號 #123456">
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="background: #6d28d9; border-color: #6d28d9;" onclick="return confirm('確認已完成檢查與出貨交付，將訂單狀態轉為「待收款」嗎？');">
+          <i class="fa-solid fa-truck-fast"></i> 確認檢查與出貨完畢（轉待收款）
+        </button>
+      </form>
+    {% else %}
+      <div style="color: var(--text-muted); font-size: 0.9rem;">
+        目前正在等待工程師／設備庫存管理人員進行硬體配貨檢查與出貨交付確認。
+      </div>
+    {% endif %}
+  </div>
+{% endif %}
+
+<!-- 步驟 6：待收款追蹤與管理部入帳結案工作台 -->
+{% if order.status == 'pending_payment' or order.status == 'closed' or payments %}
+<div class="card" style="margin-bottom: 1.5rem; {% if order.status == 'pending_payment' %}border: 2px solid #2563eb;{% endif %}">
+  <div class="card-header" style="flex-wrap: wrap; gap: 0.75rem;">
+    <div class="card-title" style="color: {% if order.status == 'closed' %}#059669{% else %}#1d4ed8{% endif %};">
+      <i class="fa-solid fa-sack-dollar"></i> 步驟 6：訂單收款回報與管理部入帳結案追蹤
+    </div>
+    <div style="display: flex; gap: 0.75rem; align-items: center; font-size: 0.875rem;">
+      <span>應收總額：<strong>NT$ {{ order.total_amount|floatformat:0 }}</strong></span>
+      <span style="color: #059669;">已確認入帳：<strong>NT$ {{ order.confirmed_paid_amount|floatformat:0 }}</strong></span>
+      <span style="color: {% if order.unpaid_balance > 0 %}#dc2626{% else %}#059669{% endif %};">尚欠餘額：<strong>NT$ {{ order.unpaid_balance|floatformat:0 }}</strong></span>
+    </div>
+  </div>
+
+  <!-- 收款進度條 -->
+  <div style="background: #e2e8f0; border-radius: 999px; height: 10px; overflow: hidden; margin-bottom: 1.25rem;">
+    <div style="background: {% if order.status == 'closed' %}#059669{% else %}#2563eb{% endif %}; height: 100%; width: {{ order.paid_progress_percent }}%; transition: width 0.3s ease;"></div>
+  </div>
+
+  {% if payments %}
+    <div class="table-responsive" style="margin-bottom: 1.25rem;">
+      <table>
+        <thead>
+          <tr>
+            <th>收款日期</th>
+            <th>金額</th>
+            <th>付款方式</th>
+            <th>帳號後五碼 / 憑證編號</th>
+            <th>回報業務 / 備註</th>
+            <th>水單附件</th>
+            <th>對帳狀態</th>
+            <th style="text-align: right;">管理部對帳操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for pm in payments %}
+            <tr>
+              <td>{{ pm.payment_date|date:"Y-m-d" }}</td>
+              <td style="font-weight: 700;">NT$ {{ pm.amount|floatformat:0 }}</td>
+              <td>{{ pm.get_payment_method_display }}</td>
+              <td style="font-family: monospace;">{{ pm.reference_no|default:"-" }}</td>
+              <td style="font-size: 0.82rem;">
+                <div>{{ pm.reported_by.username|default:"-" }} ({{ pm.reported_at|date:"m/d H:i" }})</div>
+                {% if pm.note %}<div style="color: var(--text-muted);">{{ pm.note }}</div>{% endif %}
+                {% if pm.review_note %}<div style="color: #b45309;">帳務備註：{{ pm.review_note }}</div>{% endif %}
+              </td>
+              <td>
+                {% if pm.proof_file %}
+                  <a href="{% url 'order-payment-proof' pm.pk %}" target="_blank" class="btn btn-outline btn-sm">
+                    <i class="fa-solid fa-file-arrow-down"></i> 查看水單
+                  </a>
+                {% else %}-{% endif %}
+              </td>
+              <td>
+                {% if pm.status == 'confirmed' %}
+                  <span class="badge badge-available">已入帳 ({{ pm.confirmed_by.username|default:"" }})</span>
+                {% elif pm.status == 'rejected' %}
+                  <span class="badge badge-scrapped">已退回</span>
+                {% else %}
+                  <span class="badge badge-loaned">待管理部確認</span>
+                {% endif %}
+              </td>
+              <td style="text-align: right; white-space: nowrap;">
+                {% if pm.status == 'pending' and can_close_orders and order.status == 'pending_payment' %}
+                  <form method="post" action="{% url 'order-payment-confirm' pm.pk %}" style="display: inline;">
+                    {% csrf_token %}
+                    <input type="hidden" name="auto_close" value="1">
+                    <button type="submit" class="btn btn-primary btn-sm" style="background: #059669; border-color: #059669;" onclick="return confirm('確認此筆 NT$ {{ pm.amount|floatformat:0 }} 已實際入帳？（若累計已收齊將自動結案）');">
+                      <i class="fa-solid fa-check"></i> 確認入帳
+                    </button>
+                  </form>
+                  <button type="button" class="btn btn-danger btn-sm" onclick="openRejectPaymentModal('{{ pm.pk }}', '{{ pm.amount|floatformat:0 }}')">
+                    <i class="fa-solid fa-xmark"></i> 退回
+                  </button>
+                {% else %}-{% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+
+  {% if order.status == 'pending_payment' %}
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1.25rem;">
+      {% if can_edit_orders or can_approve_orders or can_close_orders %}
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1rem 1.25rem;">
+          <div style="font-weight: 700; margin-bottom: 0.75rem;"><i class="fa-solid fa-plus-circle" style="color: #2563eb;"></i> 業務回報收款紀錄（支援分期）</div>
+          <form method="post" action="{% url 'order-payment-report' order.pk %}" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem;">
+              <div class="form-group">
+                <label style="font-size: 0.8rem;">本次收款金額 (NT$) *</label>
+                {{ payment_form.amount }}
+              </div>
+              <div class="form-group">
+                <label style="font-size: 0.8rem;">收款/匯款日期 *</label>
+                {{ payment_form.payment_date }}
+              </div>
+              <div class="form-group">
+                <label style="font-size: 0.8rem;">付款方式</label>
+                {{ payment_form.payment_method }}
+              </div>
+              <div class="form-group">
+                <label style="font-size: 0.8rem;">帳號後五碼 / 發票號</label>
+                {{ payment_form.reference_no }}
+              </div>
+            </div>
+            <div class="form-group">
+              <label style="font-size: 0.8rem;">匯款水單 / 憑證附件 (選填)</label>
+              {{ payment_form.proof_file }}
+            </div>
+            <div class="form-group">
+              <label style="font-size: 0.8rem;">備註說明</label>
+              {{ payment_form.note }}
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm">
+              <i class="fa-solid fa-paper-plane"></i> 送出收款回報通知管理部
+            </button>
+          </form>
+        </div>
+      {% endif %}
+
+      {% if can_close_orders %}
+        <div style="background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 10px; padding: 1rem 1.25rem; display: flex; flex-direction: column; justify-content: space-between;">
+          <div>
+            <div style="font-weight: 700; color: #059669; margin-bottom: 0.5rem;">
+              <i class="fa-solid fa-flag-checkered"></i> 管理部確認入帳並結案
+            </div>
+            <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 0.75rem;">
+              當確認所有款項入帳（累計已入帳達應收總額）後，系統可自動結案；若有匯費微調或特殊折讓結清，亦可於下方填寫結案備註後直接結案。
+            </p>
+          </div>
+          <form method="post" action="{% url 'order-close' order.pk %}">
+            {% csrf_token %}
+            <div class="form-group" style="margin-bottom: 0.75rem;">
+              <label style="font-size: 0.8rem;">結案說明備註 {% if order.unpaid_balance > 0 %}<span style="color:#dc2626;">(尚有餘額時必填)</span>{% endif %}</label>
+              <input type="text" name="closing_note" class="form-control" placeholder="例如：款項已核對入帳完畢結案">
+            </div>
+            <button type="submit" class="btn btn-primary" style="background: #059669; border-color: #059669; width: 100%;" onclick="return confirm('確定將訂單「{{ order.order_no }}」正式結案嗎？');">
+              <i class="fa-solid fa-check-double"></i> 確認款項無誤並結案
+            </button>
+          </form>
+        </div>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- 基本資訊與金額摘要 -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 1.5rem; margin-bottom: 1.5rem;">
+  <div class="card" style="margin-bottom: 0;">
+    <div class="card-header">
+      <div class="card-title"><i class="fa-solid fa-circle-info"></i> 訂單與客戶窗口資訊</div>
+    </div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem; font-size: 0.9rem;">
+      <div>
+        <div style="font-size: 0.78rem; color: var(--text-muted);">負責業務</div>
+        <strong>{{ order.salesperson.get_full_name|default:order.salesperson.username|default:"-" }}</strong>
+      </div>
+      <div>
+        <div style="font-size: 0.78rem; color: var(--text-muted);">報價日期 / 有效期限</div>
+        <strong>{{ order.quote_date|date:"Y-m-d" }} ~ {{ order.valid_until|date:"Y-m-d"|default:"-" }}</strong>
+      </div>
+      <div>
+        <div style="font-size: 0.78rem; color: var(--text-muted);">客戶聯絡人</div>
+        <strong>{{ order.contact_name|default:"-" }}</strong>
+      </div>
+      <div>
+        <div style="font-size: 0.78rem; color: var(--text-muted);">聯絡電話 / Email</div>
+        <div>{{ order.contact_phone|default:"-" }} {% if order.contact_email %}/ {{ order.contact_email }}{% endif %}</div>
+      </div>
+      <div style="grid-column: 1 / -1;">
+        <div style="font-size: 0.78rem; color: var(--text-muted);">付款條件</div>
+        <div>{{ order.payment_terms|default:"-" }}</div>
+      </div>
+      <div style="grid-column: 1 / -1; border-top: 1px dashed #e2e8f0; padding-top: 0.65rem; font-size: 0.82rem; color: var(--text-muted);">
+        送審：{{ order.submitted_at|date:"Y-m-d H:i"|default:"-" }} ｜
+        核准：{{ order.approved_by.username|default:"-" }} ({{ order.approved_at|date:"Y-m-d H:i"|default:"-" }})<br>
+        出貨：{{ order.shipped_by.username|default:"-" }} ({{ order.shipped_at|date:"Y-m-d H:i"|default:"-" }}) ｜
+        結案：{{ order.closed_by.username|default:"-" }} ({{ order.closed_at|date:"Y-m-d H:i"|default:"-" }})
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom: 0;">
+    <div class="card-header">
+      <div class="card-title"><i class="fa-solid fa-calculator"></i> 訂單金額明細摘要</div>
+      <span class="badge badge-secondary">{{ order.get_tax_mode_display }}</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 0.55rem; font-size: 0.95rem;">
+      <div style="display: flex; justify-content: space-between;">
+        <span style="color: var(--text-muted);">品項明細小計：</span>
+        <strong>NT$ {{ order.subtotal|floatformat:0 }}</strong>
+      </div>
+      <div style="display: flex; justify-content: space-between;">
+        <span style="color: var(--text-muted);">議價折讓金額：</span>
+        <strong style="color: #dc2626;">- NT$ {{ order.discount_amount|floatformat:0 }}</strong>
+      </div>
+      <div style="display: flex; justify-content: space-between;">
+        <span style="color: var(--text-muted);">營業稅額：</span>
+        <strong>NT$ {{ order.tax_amount|floatformat:0 }}</strong>
+      </div>
+      <div style="display: flex; justify-content: space-between; padding-top: 0.65rem; border-top: 1px solid #e2e8f0; font-size: 1.2rem;">
+        <span style="font-weight: 700;">訂單應收總計：</span>
+        <strong style="color: var(--primary);">NT$ {{ order.total_amount|floatformat:0 }}</strong>
+      </div>
+      {% if order.internal_note %}
+        <div style="margin-top: 0.5rem; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 0.6rem 0.85rem; font-size: 0.82rem; color: #92400e;">
+          <strong>內部業務備註：</strong>{{ order.internal_note }}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- 訂購品項明細表 -->
+<div class="card" style="margin-bottom: 1.5rem;">
+  <div class="card-header">
+    <div class="card-title"><i class="fa-solid fa-boxes-packing"></i> 訂購品項明細</div>
+  </div>
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>類型</th>
+          <th>品項名稱與系統主檔</th>
+          <th>規格 / 期間 / SLA</th>
+          <th>數量</th>
+          <th>單價</th>
+          <th>小計</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+          <tr>
+            <td>{{ forloop.counter }}</td>
+            <td><span class="badge badge-secondary">{{ item.get_item_type_display }}</span></td>
+            <td>
+              <strong>{{ item.name }}</strong>
+              {% if item.product %}<div style="font-size: 0.78rem; color: var(--text-muted);">產品: [{{ item.product.code }}] {{ item.product.name }} ({{ item.get_license_type_display }})</div>{% endif %}
+              {% if item.hardware_model %}<div style="font-size: 0.78rem; color: var(--text-muted);">硬體型號: {{ item.hardware_model.name }}</div>{% endif %}
+            </td>
+            <td style="font-size: 0.85rem;">
+              {% if item.description %}<div>{{ item.description }}</div>{% endif %}
+              {% if item.start_date or item.end_date %}<div style="color: var(--text-muted);">期間: {{ item.start_date|date:"Y-m-d"|default:"-" }} ~ {{ item.end_date|date:"Y-m-d"|default:"永久" }}</div>{% endif %}
+              {% if item.sla_level %}<div style="color: var(--text-muted);">SLA: {{ item.sla_level }}</div>{% endif %}
+            </td>
+            <td>{{ item.quantity }} {{ item.unit }}</td>
+            <td>NT$ {{ item.unit_price|floatformat:0 }}</td>
+            <td style="font-weight: 700;">NT$ {{ item.line_total|floatformat:0 }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- 關聯自動開立單據與出貨硬體資產 -->
+{% if generated_licenses or generated_contracts or shipped_devices %}
+<div class="card" style="margin-bottom: 1.5rem;">
+  <div class="card-header">
+    <div class="card-title"><i class="fa-solid fa-link" style="color: #059669;"></i> 本訂單關聯產生之授權書、保固合約與出貨設備</div>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem;">
+    {% if generated_licenses %}
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1rem;">
+        <div style="font-weight: 700; margin-bottom: 0.6rem; color: #0284c7;"><i class="fa-solid fa-certificate"></i> 軟體授權書 ({{ generated_licenses|length }})</div>
+        {% for lic in generated_licenses %}
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.45rem 0; border-bottom: 1px dashed #e2e8f0; gap: 0.5rem;">
+            <div>
+              <a href="{% url 'license-detail' lic.pk %}" style="font-family: monospace; font-weight: 700; color: var(--primary); text-decoration: none;">{{ lic.license_no }}</a>
+              <div style="font-size: 0.78rem; color: var(--text-muted);">{{ lic.product.name }} ({{ lic.quantity }}{{ lic.unit }})</div>
+            </div>
+            <div style="display: flex; gap: 0.35rem; align-items: center;">
+              <span class="badge {{ lic.badge_class }}">{{ lic.status_display }}</span>
+              {% if lic.approval_status == 'approved' %}
+                <button type="button" class="btn btn-outline btn-sm" data-cert-export="license" data-cert-id="{{ lic.pk }}" title="預覽並匯出授權證書">
+                  <i class="fa-solid fa-award" style="color: #4d7c0f;"></i>
+                </button>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% if generated_contracts %}
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1rem;">
+        <div style="font-weight: 700; margin-bottom: 0.6rem; color: #059669;"><i class="fa-solid fa-file-contract"></i> 維護保固合約 ({{ generated_contracts|length }})</div>
+        {% for ct in generated_contracts %}
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.45rem 0; border-bottom: 1px dashed #e2e8f0; gap: 0.5rem;">
+            <div>
+              <a href="{% url 'contract-update' ct.pk %}" style="font-family: monospace; font-weight: 700; color: var(--primary); text-decoration: none;">{{ ct.contract_no }}</a>
+              <div style="font-size: 0.78rem; color: var(--text-muted);">{{ ct.name }}</div>
+            </div>
+            <div style="display: flex; gap: 0.35rem; align-items: center;">
+              <span class="badge {{ ct.badge_class }}">{{ ct.status_display }}</span>
+              {% if ct.approval_status == 'approved' %}
+                <button type="button" class="btn btn-outline btn-sm" data-cert-export="warranty" data-cert-id="{{ ct.pk }}" title="預覽並匯出保固證書">
+                  <i class="fa-solid fa-award" style="color: #059669;"></i>
+                </button>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% if shipped_devices %}
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1rem;">
+        <div style="font-weight: 700; margin-bottom: 0.6rem; color: #7c3aed;"><i class="fa-solid fa-server"></i> 已出貨硬體設備 ({{ shipped_devices|length }} 台)</div>
+        {% for dev in shipped_devices %}
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.45rem 0; border-bottom: 1px dashed #e2e8f0;">
+            <div>
+              <a href="{% url 'hardware-detail' dev.pk %}" style="font-family: monospace; font-weight: 700; color: var(--primary); text-decoration: none;">{{ dev.code }}</a>
+              <span style="font-size: 0.8rem; color: var(--text-muted); margin-left: 4px;">({{ dev.model.name }})</span>
+            </div>
+            <span class="badge badge-shipped">{{ dev.get_status_display }}</span>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<!-- 佐證附件管理 與 報價歷史版次快照 -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 1.5rem;">
+  <!-- 佐證附件 -->
+  <div class="card" style="margin-bottom: 0;">
+    <div class="card-header">
+      <div class="card-title"><i class="fa-solid fa-paperclip"></i> 訂單佐證附件 ({{ attachments|length }})</div>
+    </div>
+    {% if order.status != 'cancelled' %}
+      <form method="post" action="{% url 'order-attachment-upload' order.pk %}" enctype="multipart/form-data" style="background: #f8fafc; padding: 0.85rem; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 1rem;">
+        {% csrf_token %}
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.5rem;">
+          {{ attachment_form.attachment_type }}
+          {{ attachment_form.note }}
+        </div>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          {{ attachment_form.file }}
+          <button type="submit" class="btn btn-primary btn-sm" style="white-space: nowrap;">
+            <i class="fa-solid fa-upload"></i> 上傳附件
+          </button>
+        </div>
+      </form>
+    {% endif %}
+
+    {% if attachments %}
+      <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+        {% for att in attachments %}
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0.75rem; border: 1px solid #e2e8f0; border-radius: 8px; gap: 0.5rem;">
+            <div style="min-width: 0;">
+              <div>
+                <span class="badge badge-secondary" style="font-size: 0.7rem;">{{ att.get_attachment_type_display }}</span>
+                <a href="{% url 'order-attachment-download' att.pk %}?preview=1" target="_blank" style="font-weight: 600; color: var(--primary); text-decoration: none; word-break: break-all;">{{ att.filename }}</a>
+              </div>
+              <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">
+                {{ att.formatted_size }} ｜ {{ att.uploaded_by.username|default:"-" }} ｜ {{ att.uploaded_at|date:"Y-m-d H:i" }}
+                {% if att.note %}｜ {{ att.note }}{% endif %}
+              </div>
+            </div>
+            <div style="display: flex; gap: 0.3rem; flex-shrink: 0;">
+              <a href="{% url 'order-attachment-download' att.pk %}" class="btn btn-outline btn-sm" title="下載"><i class="fa-solid fa-download"></i></a>
+              {% if can_edit_orders or can_approve_orders %}
+                <form method="post" action="{% url 'order-attachment-delete' att.pk %}" style="display:inline;" onsubmit="return confirm('確定刪除附件「{{ att.filename|escapejs }}」嗎？');">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-outline btn-sm" style="color: #ef4444;" title="刪除"><i class="fa-solid fa-trash"></i></button>
+                </form>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div style="text-align: center; padding: 1.5rem; color: var(--text-muted); font-size: 0.875rem;">
+        尚未上傳任何佐證附件（如客戶回簽報價單、PO 採購單等）
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- 報價版本歷史留存 -->
+  <div class="card" style="margin-bottom: 0;">
+    <div class="card-header">
+      <div class="card-title"><i class="fa-solid fa-clock-rotate-left"></i> 報價歷史版次留存 ({{ versions|length }})</div>
+    </div>
+    {% if versions %}
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>版次</th>
+              <th>總金額 (變動)</th>
+              <th>修改人 / 說明</th>
+              <th style="text-align: right;">報價單</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for v in versions %}
+              <tr>
+                <td><span class="badge {% if v.version_no == order.current_version %}badge-primary{% else %}badge-secondary{% endif %}" style="font-family: monospace;">v{{ v.version_no }}</span></td>
+                <td style="font-weight: 700; white-space: nowrap;">
+                  NT$ {{ v.total_amount|floatformat:0 }}
+                  {% if v.diff_from_prev is not None and v.diff_from_prev != 0 %}
+                    <div style="font-size: 0.72rem; color: {% if v.diff_from_prev < 0 %}#dc2626{% else %}#059669{% endif %};">
+                      {% if v.diff_from_prev > 0 %}+{% endif %}{{ v.diff_from_prev|floatformat:0 }}
+                    </div>
+                  {% endif %}
+                </td>
+                <td style="font-size: 0.8rem;">
+                  <div>{{ v.change_note|default:"-" }}</div>
+                  <div style="color: var(--text-muted);">{{ v.created_by.username|default:"-" }} ｜ {{ v.created_at|date:"Y-m-d H:i" }}</div>
+                </td>
+                <td style="text-align: right;">
+                  <a href="{% url 'order-quotation-version-print' order.pk v.version_no %}" target="_blank" class="btn btn-outline btn-sm">
+                    <i class="fa-solid fa-print"></i> 檢視 v{{ v.version_no }}
+                  </a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div style="text-align: center; padding: 1.5rem; color: var(--text-muted);">尚無版本快照</div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Modals -->
+{% if order.status == 'pending_approval' and can_approve_orders %}
+<div id="rejectOrderModal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.55); z-index:9999; align-items:center; justify-content:center; padding:1rem;">
+  <div class="card" style="width:100%; max-width:480px; margin:0;">
+    <h3 style="font-size:1.15rem; font-weight:700; margin-bottom:0.5rem; color:#dc2626;"><i class="fa-solid fa-rotate-left"></i> 退回訂單修正</h3>
+    <form method="post" action="{% url 'order-reject' order.pk %}">
+      {% csrf_token %}
+      <div class="form-group">
+        <label>退回原因說明 *</label>
+        <textarea name="rejection_reason" class="form-control" rows="3" required placeholder="請填寫需業務修正之事項..."></textarea>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:1rem;">
+        <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('rejectOrderModal').style.display='none'">取消</button>
+        <button type="submit" class="btn btn-danger btn-sm">確認退回</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{% if can_close_orders %}
+<div id="rejectPaymentModal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.55); z-index:9999; align-items:center; justify-content:center; padding:1rem;">
+  <div class="card" style="width:100%; max-width:460px; margin:0;">
+    <h3 style="font-size:1.15rem; font-weight:700; margin-bottom:0.5rem; color:#dc2626;"><i class="fa-solid fa-xmark"></i> 退回收款回報 (<span id="rejectPayAmt"></span>)</h3>
+    <form id="rejectPaymentForm" method="post" action="">
+      {% csrf_token %}
+      <div class="form-group">
+        <label>退回原因說明 *</label>
+        <textarea name="review_note" class="form-control" rows="3" required placeholder="例如：銀行帳戶未查到此筆匯款，請再次確認水單..."></textarea>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:1rem;">
+        <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('rejectPaymentModal').style.display='none'">取消</button>
+        <button type="submit" class="btn btn-danger btn-sm">確認退回</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{% if can_cancel_order %}
+<div id="cancelOrderModal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.55); z-index:9999; align-items:center; justify-content:center; padding:1rem;">
+  <div class="card" style="width:100%; max-width:500px; margin:0;">
+    <h3 style="font-size:1.15rem; font-weight:700; margin-bottom:0.5rem; color:#dc2626;"><i class="fa-solid fa-ban"></i> 作廢訂單確認</h3>
+    <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem;">
+      作廢後將自動停用本訂單開立之授權書、終止維護保固合約，並將已綁定出貨之硬體設備退回庫存（仍完整保留歷史紀錄）。
+    </p>
+    <form method="post" action="{% url 'order-cancel' order.pk %}">
+      {% csrf_token %}
+      <div class="form-group">
+        <label>作廢原因 *</label>
+        <textarea name="cancel_reason" class="form-control" rows="3" required placeholder="請說明作廢原因..."></textarea>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:1rem;">
+        <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('cancelOrderModal').style.display='none'">取消</button>
+        <button type="submit" class="btn btn-danger btn-sm">確認作廢訂單</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<script>
+function openRejectPaymentModal(paymentId, amtStr) {
+  document.getElementById('rejectPayAmt').textContent = 'NT$ ' + amtStr;
+  document.getElementById('rejectPaymentForm').action = '/orders/payments/' + paymentId + '/reject/';
+  document.getElementById('rejectPaymentModal').style.display = 'flex';
+}
+</script>
+{% endblock %}
