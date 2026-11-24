@@ -25,6 +25,10 @@ backups/
 # Local environment / inspection tools
 antigravity_env_tools/
 
+# User-uploaded media files (contracts, attachments, cert templates)
+media/*
+!media/.gitkeep
+
 # IDE & Editor files
 .vscode/
 .idea/
