@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}匯入客戶名冊 - CRM Server{% endblock %}
+
+{% block content %}
+<div style="max-width: 960px; margin: 0 auto;">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+    <div style="display: flex; align-items: center; gap: 1rem;">
+      <a href="{% url 'customer-list' %}" class="btn btn-outline btn-sm">
+        <i class="fa-solid fa-arrow-left"></i> 返回客戶名冊
+      </a>
+      <div>
+        <h1 style="font-size: 1.5rem; font-weight: 700; margin-bottom: 0.15rem;">批次匯入客戶名冊</h1>
+        <p style="color: var(--text-muted); font-size: 0.9rem; margin: 0;">支援透過標準 Excel (.xlsx) 或 CSV 範本快速建立與更新客戶資料</p>
+      </div>
+    </div>
+
+    <a href="{% url 'customer-import-template' %}" class="btn btn-outline" style="display: inline-flex; align-items: center; gap: 0.5rem; border-color: #10b981; color: #059669; font-weight: 600;">
+      <i class="fa-solid fa-download"></i> 下載客戶匯入範本 (.xlsx)
+    </a>
+  </div>
+
+  <!-- 錯誤清單區塊 (All-or-Nothing 檢核未通過時顯示) -->
+  {% if error_list %}
+    <div class="card" style="margin-bottom: 1.5rem; border: 1px solid rgba(239, 68, 68, 0.4); background: rgba(254, 242, 242, 0.7);">
+      <div style="display: flex; align-items: center; gap: 0.65rem; margin-bottom: 0.75rem; color: #dc2626;">
+        <i class="fa-solid fa-circle-exclamation" style="font-size: 1.25rem;"></i>
+        <h3 style="font-size: 1.05rem; font-weight: 700; margin: 0;">
+          匯入檢核未通過（共發現 {{ error_list|length }} 項問題，本次未寫入任何資料）
+        </h3>
+      </div>
+      <p style="font-size: 0.875rem; color: #991b1b; margin-bottom: 1rem;">
+        為確保資料庫完整性，系統採「全部成功才寫入」機制。請根據下方錯誤列號修正 Excel 檔案後重新上傳：
+      </p>
+      <div class="table-responsive" style="background: #ffffff; border-radius: 8px; border: 1px solid #fecaca;">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 120px;">發生位置</th>
+              <th style="width: 160px;">客戶代號</th>
+              <th>錯誤原因與修正說明</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for err in error_list %}
+              <tr>
+                <td><span class="badge badge-scrapped">{{ err.row }}</span></td>
+                <td><strong style="font-family: monospace;">{{ err.code }}</strong></td>
+                <td style="color: #b91c1c; font-weight: 500;">{{ err.message }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- 上傳表單卡片 -->
+  <div class="card" style="margin-bottom: 1.5rem;">
+    <h3 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem;">
+      <i class="fa-solid fa-cloud-arrow-up" style="color: var(--primary);"></i> 步驟 1：選擇檔案並執行匯入
+    </h3>
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <div class="form-group">
+        <label for="{{ form.file.id_for_label }}">{{ form.file.label }} <span style="color: #ef4444;">*</span></label>
+        {{ form.file }}
+        {% if form.file.help_text %}
+          <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.35rem;">{{ form.file.help_text }}</div>
+        {% endif %}
+        {% if form.file.errors %}
+          <div style="color: #ef4444; font-size: 0.85rem; margin-top: 0.35rem;">{{ form.file.errors.0 }}</div>
+        {% endif %}
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--glass-border);">
+        <a href="{% url 'customer-list' %}" class="btn btn-outline">取消</a>
+        <button type="submit" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 0.5rem;">
+          <i class="fa-solid fa-file-import"></i> 開始驗證並匯入
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- 欄位說明與規則卡片 -->
+  <div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+      <h3 style="font-size: 1.1rem; font-weight: 600; margin: 0;">
+        <i class="fa-solid fa-circle-info" style="color: var(--primary);"></i> 欄位填寫說明與匯入規則
+      </h3>
+      <span style="font-size: 0.8rem; color: var(--text-muted);">
+        提示：您也可以將「匯出 Excel」的客戶資料修改後直接原檔上傳更新
+      </span>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; margin-bottom: 1.25rem;">
+      <div style="background: #f8fafc; padding: 0.85rem 1rem; border-radius: 8px; border-left: 4px solid #3b82f6;">
+        <div style="font-weight: 700; font-size: 0.9rem; margin-bottom: 0.25rem; color: #1e3a8a;">重複代號自動更新 (Upsert)</div>
+        <div style="font-size: 0.82rem; color: var(--text-muted);">
+          若檔案中的「客戶代號」已存在於系統，將自動更新該客戶資料；檔案中留空的選填欄位會保留系統既有資料，不會被清空。
+        </div>
+      </div>
+      <div style="background: #f8fafc; padding: 0.85rem 1rem; border-radius: 8px; border-left: 4px solid #10b981;">
+        <div style="font-weight: 700; font-size: 0.9rem; margin-bottom: 0.25rem; color: #065f46;">主要聯絡人同步建檔</div>
+        <div style="font-size: 0.82rem; color: var(--text-muted);">
+          若有填寫「主要聯絡人」姓名，系統會同步在該客戶名下建立或更新對應的「主要聯絡人」名冊紀錄。
+        </div>
+      </div>
+      <div style="background: #f8fafc; padding: 0.85rem 1rem; border-radius: 8px; border-left: 4px solid #f59e0b;">
+        <div style="font-weight: 700; font-size: 0.9rem; margin-bottom: 0.25rem; color: #92400e;">全數通過才寫入 (All-or-Nothing)</div>
+        <div style="font-size: 0.82rem; color: var(--text-muted);">
+          若檔案中有任何一列缺少必填欄位或格式錯誤，整批檔案皆不會寫入，並會列出詳細列號供您修正。
+        </div>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 150px;">欄位名稱</th>
+            <th style="width: 100px;">必填要求</th>
+            <th>填寫規則與說明</th>
+            <th style="width: 200px;">填寫範例</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>客戶代號</strong></td>
+            <td><span class="badge badge-scrapped">必填 *</span></td>
+            <td>全系統唯一識別碼，可填寫公司 8 碼統編或自訂客戶代號（不可留空）。</td>
+            <td><code>80123456</code> 或 <code>CUST-001</code></td>
+          </tr>
+          <tr>
+            <td><strong>客戶名稱</strong></td>
+            <td><span class="badge badge-scrapped">必填 *</span></td>
+            <td>客戶公司全銜或組織機構名稱。</td>
+            <td>範例科技股份有限公司</td>
+          </tr>
+          <tr>
+            <td>統一編號</td>
+            <td><span class="badge badge-secondary">選填</span></td>
+            <td>公司 8 碼統一編號。</td>
+            <td><code>80123456</code></td>
+          </tr>
+          <tr>
+            <td>上層客戶代號</td>
+            <td><span class="badge badge-secondary">選填</span></td>
+            <td>若此客戶隸屬於某經銷商或代理商，可填寫該上層客戶之「客戶代號」（支援同檔案內一併建立或系統既有代號；填寫 <code>無</code> 或 <code>CLEAR</code> 可解除關聯）。</td>
+            <td><code>80123456</code></td>
+          </tr>
+          <tr>
+            <td>主要聯絡人</td>
+            <td><span class="badge badge-secondary">選填</span></td>
+            <td>主要負責窗口姓名。填寫後將自動同步至客戶聯絡人名冊。</td>
+            <td>王大明</td>
+          </tr>
+          <tr>
+            <td>電子信箱</td>
+            <td><span class="badge badge-secondary">選填</span></td>
+            <td>標準電子郵件格式（需含 <code>@</code> 與網域名稱）。</td>
+            <td><code>daming@example.com</code></td>
+          </tr>
+          <tr>
+            <td>聯絡電話</td>
+            <td><span class="badge badge-secondary">選填</span></td>
+            <td>市話、分機或手機號碼。範本已預設為文字格式避免前導 0 遺失。</td>
+            <td><code>02-2711-0000</code></td>
+          </tr>
+          <tr>
+            <td>聯絡地址</td>
+            <td><span class="badge badge-secondary">選填</span></td>
+            <td>公司通訊地址或設備裝機地址。</td>
+            <td>台北市信義區信義路五段7號</td>
+          </tr>
+          <tr>
+            <td>備註說明</td>
+            <td><span class="badge badge-secondary">選填</span></td>
+            <td>客戶補充備忘事項。</td>
+            <td>重點維護客戶</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

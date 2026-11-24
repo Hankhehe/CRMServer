@@ -1,0 +1,78 @@
+<li class="hierarchy-tree-item">
+  <div class="hierarchy-node-card {% if node.is_current %}is-current-node{% elif node.is_ancestor %}is-ancestor-node{% else %}is-descendant-node{% endif %}{% if not node.can_access %} is-locked-node{% endif %}">
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; width: 100%;">
+      <!-- 左側：階層標籤、代號與客戶名稱 -->
+      <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; min-width: 0;">
+        {% if node.is_current %}
+          <span class="badge" style="background: var(--primary); color: #ffffff; font-size: 0.72rem; padding: 2px 8px; flex-shrink: 0;">
+            <i class="fa-solid fa-location-dot"></i> 目前客戶 (L{{ node.level|add:1 }})
+          </span>
+        {% elif node.is_ancestor %}
+          <span class="badge badge-secondary" style="font-size: 0.72rem; padding: 2px 8px; flex-shrink: 0;">
+            <i class="fa-solid fa-building-shield"></i> 上層 L{{ node.level|add:1 }}
+          </span>
+        {% else %}
+          <span class="badge badge-shipped" style="font-size: 0.72rem; padding: 2px 8px; flex-shrink: 0;">
+            <i class="fa-solid fa-Share-nodes"></i> 下層 L{{ node.level|add:1 }}
+          </span>
+        {% endif %}
+
+        <span style="font-family: monospace; font-size: 0.85rem; font-weight: 700; color: var(--primary); background: rgba(79, 70, 229, 0.08); padding: 2px 7px; border-radius: 5px;">
+          {{ node.code }}
+        </span>
+
+        {% if node.is_current %}
+          <span style="font-weight: 700; font-size: 0.98rem; color: var(--text-main);">
+            {{ node.name }}
+          </span>
+        {% elif node.can_access %}
+          <a href="{% url 'customer-detail' node.id %}" class="hierarchy-node-title-link" title="點擊前往「{{ node.name }}」客戶詳情頁">
+            {{ node.name }}
+            <i class="fa-solid fa-arrow-up-right-from-square" style="font-size: 0.72rem; margin-left: 3px; opacity: 0.7;"></i>
+          </a>
+        {% else %}
+          <span style="font-weight: 600; font-size: 0.95rem; color: var(--text-muted); cursor: not-allowed;" title="您未關注此客戶，依業務隔離權限僅顯示名稱">
+            {{ node.name }}
+            <span class="badge badge-secondary" style="font-size: 0.68rem; margin-left: 4px; padding: 1px 6px;">
+              <i class="fa-solid fa-lock"></i> 未關注
+            </span>
+          </span>
+        {% endif %}
+      </div>
+
+      <!-- 右側：維護合約燈號、硬體數量、授權書數量與快捷解除按鈕 -->
+      <div style="display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap;">
+        <span class="badge {{ node.contract_badge_class }}" style="font-size: 0.75rem;">
+          {{ node.contract_status_display }}
+        </span>
+
+        <span class="hierarchy-stat-pill" title="持有硬體設備數量">
+          <i class="fa-solid fa-server" style="color: #0284c7;"></i>
+          硬體 <strong>{{ node.hardware_count }}</strong>
+        </span>
+
+        <span class="hierarchy-stat-pill" title="軟體授權書數量">
+          <i class="fa-solid fa-key" style="color: #7c3aed;"></i>
+          授權書 <strong>{{ node.license_count }}</strong>
+        </span>
+
+        {% if node.is_direct_child and can_edit_customers and node.can_access %}
+          <form method="post" action="{% url 'customer-unbind-child' customer.pk node.id %}" style="display: inline;" onsubmit="return confirm('確定要解除「{{ node.name|escapejs }} ({{ node.code|escapejs }})」與本客戶的上下游關聯嗎？（不會刪除該客戶資料）');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline btn-sm" style="padding: 0.15rem 0.45rem; font-size: 0.72rem; color: #ef4444; border-color: rgba(239, 68, 68, 0.3);" title="解除此直屬下層客戶之關聯">
+              <i class="fa-solid fa-link-slash"></i> 解除
+            </button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if node.children %}
+    <ul class="hierarchy-tree-list">
+      {% for child in node.children %}
+        {% include "customers/partials/hierarchy_tree_node.html" with node=child %}
+      {% endfor %}
+    </ul>
+  {% endif %}
+</li>

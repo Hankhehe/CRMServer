@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - CRM Server{% endblock %}
+
+{% block content %}
+<div style="max-width: 820px; margin: 0 auto;">
+  <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+    <a href="{% if next %}{{ next }}{% elif device %}{% url 'hardware-detail' device.pk %}{% elif probe %}{% url 'hardware-detail' probe.pk %}{% else %}{% url 'hardware-list' %}{% endif %}" class="btn btn-outline btn-sm">
+      <i class="fa-solid fa-arrow-left"></i> 返回
+    </a>
+    <h1 style="font-size: 1.5rem; font-weight: 700;">{{ title }}</h1>
+  </div>
+
+  <div class="card">
+    {% if requires_approval %}
+      <div style="border-left: 4px solid #d97706; background: rgba(245, 158, 11, 0.08); padding: 0.85rem 1.1rem; border-radius: 6px; margin-bottom: 1.25rem; font-size: 0.875rem; color: #92400e;">
+        <i class="fa-solid fa-stamp"></i> <strong>硬體出庫簽核提醒：</strong>目前已啟用「硬體設備出庫簽核流程」。若您將設備狀態設為「已出貨」或「借測中」，儲存後系統將自動預鎖設備為「待審」狀態並通知覆核主管核准。
+      </div>
+    {% endif %}
+    <form method="post">
+      {% csrf_token %}
+      {% if next %}
+        <input type="hidden" name="next" value="{{ next }}">
+      {% endif %}
+      
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;">
+        <div class="form-group">
+          <label>設備序號 / 資產編號 <span style="color: #ef4444;">*</span></label>
+          {{ form.code }}
+          {% if form.code.errors %}<div style="color: #ef4444; font-size: 0.8rem;">{{ form.code.errors.0 }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label>設備型號 <span style="color: #ef4444;">*</span></label>
+          {{ form.model }}
+          {% if form.model.errors %}<div style="color: #ef4444; font-size: 0.8rem;">{{ form.model.errors.0 }}</div>{% endif %}
+          <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">切換設備型號時，將自動載入該型號之自訂擴充規格欄位</div>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;">
+        <div class="form-group">
+          <label>設備狀態</label>
+          {{ form.status }}
+        </div>
+        <div class="form-group">
+          <label>進貨供應商</label>
+          {{ form.supplier }}
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;">
+        <div class="form-group">
+          <label>關聯客戶 (出貨或借測狀態必填，支援代號/名稱)</label>
+          {{ form.customer }}
+          {% if form.customer.errors %}<div style="color: #ef4444; font-size: 0.8rem;">{{ form.customer.errors.0 }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label>預計歸還日 (借測狀態必填)</label>
+          {{ form.expected_return_at }}
+          {% if form.expected_return_at.errors %}<div style="color: #ef4444; font-size: 0.8rem;">{{ form.expected_return_at.errors.0 }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;">
+        <div class="form-group">
+          <label>進貨購入日期</label>
+          {{ form.acquired_at }}
+        </div>
+      </div>
+
+      <div style="margin: 1.5rem 0 1rem 0; padding-top: 1rem; border-top: 1px dashed var(--glass-border);">
+        <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 0.75rem; color: var(--primary);">
+          <i class="fa-solid fa-microchip"></i> 基礎規格覆寫 (選填，留空則繼承型號預設規格)
+        </h3>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div class="form-group">
+            <label>連接埠數覆寫</label>
+            {{ form.port_count }}
+          </div>
+          <div class="form-group">
+            <label>CPU 規格覆寫</label>
+            {{ form.cpu }}
+          </div>
+          <div class="form-group">
+            <label>記憶體規格覆寫</label>
+            {{ form.memory }}
+          </div>
+          <div class="form-group">
+            <label>硬碟規格覆寫</label>
+            {{ form.hdd }}
+          </div>
+        </div>
+      </div>
+
+      <!-- 動態自訂擴充規格覆寫區塊 -->
+      <div style="margin: 1rem 0 1.25rem 0; padding-top: 1rem; border-top: 1px dashed var(--glass-border);">
+        <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--primary);">
+          <i class="fa-solid fa-sliders"></i> 型號自訂動態規格覆寫 (選填，留空繼承型號預設值)
+        </h3>
+        <div id="hwDynamicFieldsContainer" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; background: #f8fafc; padding: 1rem; border-radius: 8px;">
+          {% for field in form %}
+            {% if field.name|slice:":4" == "dyn_" %}
+              {% if field.field.widget.input_type == "checkbox" and field.field.choices %}
+                <div class="form-group" style="margin-bottom: 0; grid-column: 1 / -1;">
+                  <label>{{ field.label }}</label>
+                  <div style="display: flex; flex-wrap: wrap; gap: 0.85rem; padding: 0.65rem 0.85rem; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px;">
+                    {% for subwidget in field %}
+                      <label style="display: inline-flex; align-items: center; gap: 0.4rem; margin-bottom: 0; cursor: pointer; font-weight: 500;">
+                        {{ subwidget.tag }} {{ subwidget.choice_label }}
+                      </label>
+                    {% endfor %}
+                  </div>
+                  {% if field.help_text %}<div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">{{ field.help_text }}</div>{% endif %}
+                  {% if field.errors %}<div style="color: #dc2626; font-size: 0.8rem; margin-top: 0.25rem;">{{ field.errors.0 }}</div>{% endif %}
+                </div>
+              {% else %}
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                  {{ field }}
+                  {% if field.help_text %}<div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">{{ field.help_text }}</div>{% endif %}
+                  {% if field.errors %}<div style="color: #dc2626; font-size: 0.8rem; margin-top: 0.25rem;">{{ field.errors.0 }}</div>{% endif %}
+                </div>
+              {% endif %}
+            {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>設備備註說明</label>
+        {{ form.note }}
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--glass-border);">
+        <a href="{% if next %}{{ next }}{% elif device %}{% url 'hardware-detail' device.pk %}{% elif probe %}{% url 'hardware-detail' probe.pk %}{% else %}{% url 'hardware-list' %}{% endif %}" class="btn btn-outline">取消</a>
+        <button type="submit" class="btn btn-primary">儲存設備資料</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  const modelSelect = document.getElementById("id_hardware_model_select");
+  const container = document.getElementById("hwDynamicFieldsContainer");
+
+  function checkEmptyContainer() {
+    if (container && container.children.length === 0) {
+      container.innerHTML = `<div style="color: var(--text-muted); font-size: 0.85rem; grid-column: 1 / -1;">此硬體型號尚未定義額外的自訂擴充規格欄位，或請先選擇設備型號。</div>`;
+    }
+  }
+  checkEmptyContainer();
+
+  if (modelSelect) {
+    modelSelect.addEventListener("change", function() {
+      const modelId = this.value;
+      if (!modelId) {
+        container.innerHTML = `<div style="color: var(--text-muted); font-size: 0.85rem; grid-column: 1 / -1;">請先選擇設備型號。</div>`;
+        return;
+      }
+
+      fetch(`/hardware/api/models/${modelId}/meta/`)
+        .then(res => res.json())
+        .then(data => {
+          // 若未手動選供應商，自動帶入型號預設供應商
+          const supplierSelect = document.getElementById("id_supplier");
+          if (supplierSelect && !supplierSelect.value && data.supplier_id) {
+            supplierSelect.value = data.supplier_id;
+          }
+
+          container.innerHTML = "";
+          const schema = data.custom_field_schema || [];
+          if (schema.length === 0) {
+            container.innerHTML = `<div style="color: var(--text-muted); font-size: 0.85rem; grid-column: 1 / -1;">此硬體型號未定義額外的自訂擴充規格欄位。</div>`;
+            return;
+          }
+
+          schema.forEach(item => {
+            const fKey = item.key;
+            if (!fKey) return;
+            const fLabel = (item.label || fKey) + " 覆寫";
+            const fType = item.type || "text";
+            const fDef = item.default !== undefined && item.default !== null ? item.default : "";
+            const placeholderText = fDef !== "" ? `預設: ${fDef} (留空繼承預設)` : "留空繼承型號預設";
+
+            const group = document.createElement("div");
+            group.className = "form-group";
+            group.style.marginBottom = "0";
+
+            let inputHtml = "";
+            if (fType === "number") {
+              inputHtml = `<input type="number" step="any" name="dyn_${fKey}" class="form-control" id="id_dyn_${fKey}" placeholder="${placeholderText}">`;
+            } else if (fType === "select") {
+              let optHtml = `<option value="">-- 繼承預設 (${fDef || '未設定'}) --</option>`;
+              (item.options || []).forEach(opt => {
+                optHtml += `<option value="${opt}">${opt}</option>`;
+              });
+              inputHtml = `<select name="dyn_${fKey}" class="form-control" id="id_dyn_${fKey}">${optHtml}</select>`;
+            } else if (fType === "multiselect") {
+              group.style.gridColumn = "1 / -1";
+              let checksHtml = `<div style="display: flex; flex-wrap: wrap; gap: 0.85rem; padding: 0.65rem 0.85rem; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px;">`;
+              (item.options || []).forEach((opt, idx) => {
+                checksHtml += `
+                  <label style="display: inline-flex; align-items: center; gap: 0.4rem; margin-bottom: 0; cursor: pointer; font-weight: 500;">
+                    <input type="checkbox" name="dyn_${fKey}" value="${opt}" id="id_dyn_${fKey}_${idx}">
+                    ${opt}
+                  </label>
+                `;
+              });
+              checksHtml += `</div>`;
+              inputHtml = checksHtml;
+            } else if (fType === "boolean") {
+              const defStr = fDef ? "是" : "否";
+              inputHtml = `
+                <select name="dyn_${fKey}" class="form-control" id="id_dyn_${fKey}">
+                  <option value="">-- 繼承預設 (${defStr}) --</option>
+                  <option value="true">是 (True)</option>
+                  <option value="false">否 (False)</option>
+                </select>
+              `;
+            } else if (fType === "datetime") {
+              inputHtml = `<input type="datetime-local" name="dyn_${fKey}" class="form-control" id="id_dyn_${fKey}">`;
+            } else {
+              inputHtml = `<input type="text" name="dyn_${fKey}" class="form-control" id="id_dyn_${fKey}" placeholder="${placeholderText}">`;
+            }
+
+            group.innerHTML = `
+              <label for="id_dyn_${fKey}">${fLabel}</label>
+              ${inputHtml}
+              <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">型號預設值: ${fDef !== "" ? fDef : "無"}${fType === 'multiselect' ? ' (若全部不勾選則繼承預設)' : ''}</div>
+            `;
+            container.appendChild(group);
+          });
+        })
+        .catch(err => console.error("Error fetching hardware model meta:", err));
+    });
+  }
+});
+</script>
+{% endblock %}

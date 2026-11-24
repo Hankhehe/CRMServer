@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}刪除設備 - CRM Server{% endblock %}
+
+{% block content %}
+<div style="max-width: 550px; margin: 2rem auto;">
+  <div class="card" style="border-top: 4px solid #ef4444;">
+    <h2 style="font-size: 1.35rem; color: #dc2626; margin-bottom: 1rem;">確認軟刪除設備</h2>
+    <p style="font-size: 0.95rem; margin-bottom: 1.5rem; line-height: 1.6;">
+      確定要標記刪除設備「<strong>{{ probe.code }} ({{ probe.model.name }})</strong>」嗎？<br>
+      <span style="font-size: 0.85rem; color: var(--text-muted);">此操作為軟刪除 (is_deleted=True)，歷史庫存交易歷程將會予以保留。</span>
+    </p>
+    <form method="post" style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+      {% csrf_token %}
+      <a href="{% url 'hardware-detail' probe.pk %}" class="btn btn-outline">取消</a>
+      <button type="submit" class="btn btn-danger">確認刪除</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

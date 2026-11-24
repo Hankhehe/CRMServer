@@ -1,0 +1,44 @@
+# Python Virtual Environments
+env/
+venv/
+ENV/
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Database & Environment Configs (Never overwrite production DB/config)
+db.sqlite3
+*.sqlite3
+*.sqlite3-journal
+*.sqlite3-wal
+*.sqlite3-shm
+db.sqlite3.bak
+db.sqlite3.backup_*
+db_config.json
+.env
+.env.*
+backups/
+*.zip
+
+# Local environment / inspection tools
+antigravity_env_tools/
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Logs
+*.log
+
+#docker file
+docker-compose.yml
+Dockerfile

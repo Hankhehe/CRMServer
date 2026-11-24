@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}確認刪除供應商 - CRM Server{% endblock %}
+
+{% block content %}
+<div style="max-width: 600px; margin: 2rem auto;">
+  <div class="card" style="border-top: 4px solid #ef4444;">
+    <div class="card-header">
+      <div class="card-title" style="color: #dc2626;">
+        <i class="fa-solid fa-triangle-exclamation"></i> 確認刪除供應商
+      </div>
+    </div>
+    <div style="padding: 1rem 0;">
+      <p style="font-size: 1.05rem; margin-bottom: 1rem;">
+        您確定要刪除供應商 <strong>{{ supplier.name }} (代號: {{ supplier.supplier_code }})</strong> 嗎？
+      </p>
+
+      <div style="background: #f8fafc; padding: 1rem; border-radius: 8px; margin-bottom: 1.25rem;">
+        <div><strong>供應商代號：</strong> {{ supplier.supplier_code }}</div>
+        <div><strong>聯絡窗口：</strong> {{ supplier.contact|default:"未填寫" }}</div>
+        <div><strong>聯絡電話：</strong> {{ supplier.phone|default:"未填寫" }}</div>
+        <div><strong>電子郵件：</strong> {{ supplier.email|default:"未填寫" }}</div>
+        <div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed #cbd5e1;">
+          <div><strong>關聯硬體規格型號：</strong> {{ models_count }} 個</div>
+          <div><strong>關聯硬體設備庫存：</strong> {{ devices_count }} 台</div>
+        </div>
+      </div>
+
+      {% if has_relations %}
+        <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 1.25rem; color: #dc2626; font-size: 0.9rem;">
+          <i class="fa-solid fa-circle-xmark"></i> <strong>無法刪除：</strong> 此供應商目前仍有規格主檔或設備庫存關聯。請先將相關型號或設備變更為其他供應商後，再進行刪除。
+        </div>
+      {% else %}
+        <p style="color: #dc2626; font-size: 0.875rem;">
+          <i class="fa-solid fa-circle-exclamation"></i> 注意：此操作將永久刪除該供應商資料，無法復原。
+        </p>
+      {% endif %}
+    </div>
+
+    <form method="post" style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+      {% csrf_token %}
+      <a href="{% url 'hardware-suppliers' %}" class="btn btn-outline">
+        取消
+      </a>
+      {% if not has_relations %}
+        <button type="submit" class="btn btn-danger">
+          <i class="fa-solid fa-trash"></i> 確認刪除
+        </button>
+      {% endif %}
+    </form>
+  </div>
+</div>
+{% endblock %}

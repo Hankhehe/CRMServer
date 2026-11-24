@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}證書底圖範本設定 - CRM Server{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+  <div>
+    <h1 style="font-size: 1.75rem; font-weight: 700; margin-bottom: 0.25rem;">
+      <i class="fa-solid fa-award" style="color: #65a30d; margin-right: 0.45rem;"></i>
+      證書底圖範本設定
+    </h1>
+    <p style="color: var(--text-muted); font-size: 0.9rem;">
+      管理「軟體授權證書」與「軟體保固證書」匯出時所使用的背景底圖。未上傳自訂底圖時，系統將自動使用內建高解析度向量底圖。
+    </p>
+  </div>
+</div>
+
+<div class="alert alert-info" style="margin-bottom: 1.5rem;">
+  <i class="fa-solid fa-circle-info"></i>
+  <div>
+    <strong>建議規格：</strong>自訂底圖請使用<strong>橫式 A4 比例（約 1.414 : 1，例如 2480 × 1754 px）</strong>之空白無欄位文字圖片（支援 PNG / JPG / WEBP / SVG，上限 10 MB），右下角建議保留空白區域供公司用印。
+  </div>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 1.5rem;">
+  <!-- 軟體授權證書底圖卡片 -->
+  <div class="card" style="margin-bottom: 0;">
+    <div class="card-header">
+      <div class="card-title">
+        <i class="fa-solid fa-certificate" style="color: #65a30d;"></i> 軟體授權證書底圖 (License)
+      </div>
+      <div>
+        {% if has_license_bg %}
+          <span class="badge badge-available">使用自訂底圖</span>
+        {% else %}
+          <span class="badge badge-secondary">使用內建預設底圖</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div style="background: #eef2f6; border: 1px solid #dbe2ea; border-radius: 10px; padding: 0.75rem; margin-bottom: 1rem; text-align: center;">
+      <canvas id="tpl-preview-license" width="2480" height="1754" style="width: 100%; height: auto; border-radius: 6px; box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12); background: #fff;"></canvas>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 0.75rem;">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="upload_license" />
+      <div>
+        <label style="display: block; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.35rem;">
+          上傳新的授權證書自訂底圖
+        </label>
+        <input type="file" name="license_cert_bg" accept=".png,.jpg,.jpeg,.webp,.svg" required style="width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff;" />
+      </div>
+      <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+        <button type="submit" class="btn btn-primary btn-sm">
+          <i class="fa-solid fa-upload"></i> 上傳並套用自訂底圖
+        </button>
+      </div>
+    </form>
+
+    {% if has_license_bg %}
+      <form method="post" style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--glass-border);" onsubmit="return confirm('確定要移除自訂底圖並還原為內建預設授權證書底圖嗎？');">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="reset_license" />
+        <button type="submit" class="btn btn-outline btn-sm" style="color: #dc2626; border-color: rgba(220, 38, 38, 0.35);">
+          <i class="fa-solid fa-rotate-left"></i> 還原為系統內建預設底圖
+        </button>
+      </form>
+    {% endif %}
+  </div>
+
+  <!-- 軟體保固證書底圖卡片 -->
+  <div class="card" style="margin-bottom: 0;">
+    <div class="card-header">
+      <div class="card-title">
+        <i class="fa-solid fa-file-contract" style="color: #0284c7;"></i> 軟體保固證書底圖 (Warranty)
+      </div>
+      <div>
+        {% if has_warranty_bg %}
+          <span class="badge badge-available">使用自訂底圖</span>
+        {% else %}
+          <span class="badge badge-secondary">使用內建預設底圖</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div style="background: #eef2f6; border: 1px solid #dbe2ea; border-radius: 10px; padding: 0.75rem; margin-bottom: 1rem; text-align: center;">
+      <canvas id="tpl-preview-warranty" width="2480" height="1754" style="width: 100%; height: auto; border-radius: 6px; box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12); background: #fff;"></canvas>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 0.75rem;">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="upload_warranty" />
+      <div>
+        <label style="display: block; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.35rem;">
+          上傳新的保固證書自訂底圖
+        </label>
+        <input type="file" name="warranty_cert_bg" accept=".png,.jpg,.jpeg,.webp,.svg" required style="width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff;" />
+      </div>
+      <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+        <button type="submit" class="btn btn-primary btn-sm">
+          <i class="fa-solid fa-upload"></i> 上傳並套用自訂底圖
+        </button>
+      </div>
+    </form>
+
+    {% if has_warranty_bg %}
+      <form method="post" style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--glass-border);" onsubmit="return confirm('確定要移除自訂底圖並還原為內建預設保固證書底圖嗎？');">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="reset_warranty" />
+        <button type="submit" class="btn btn-outline btn-sm" style="color: #dc2626; border-color: rgba(220, 38, 38, 0.35);">
+          <i class="fa-solid fa-rotate-left"></i> 還原為系統內建預設底圖
+        </button>
+      </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    if (!window.CertificateExporter || !window.CertificateExporter.renderPreviewCanvas) return;
+
+    const licCanvas = document.getElementById("tpl-preview-license");
+    if (licCanvas) {
+      window.CertificateExporter.renderPreviewCanvas(licCanvas, {
+        cert_type: "license",
+        use_custom_bg: {{ has_license_bg|yesno:"true,false" }},
+        custom_bg_url: "{{ license_bg_url|escapejs }}",
+        fields: {
+          product_name: "PIXIS AtheNAC™-雅典娜 NAC & IP/MAC 網路安全管理系統-一年使用授權 - 10 U",
+          quantity: "20套",
+          recipient: "範例客戶股份有限公司",
+          period: "2026/01/01~2026/12/31",
+          cert_no: "L202611001-1",
+          issue_date: "民國 115 年 11 月 19 日",
+        },
+      });
+    }
+
+    const warCanvas = document.getElementById("tpl-preview-warranty");
+    if (warCanvas) {
+      window.CertificateExporter.renderPreviewCanvas(warCanvas, {
+        cert_type: "warranty",
+        use_custom_bg: {{ has_warranty_bg|yesno:"true,false" }},
+        custom_bg_url: "{{ warranty_bg_url|escapejs }}",
+        fields: {
+          product_name: "PIXIS AtheNAC 管理系統",
+          quantity: "適用 1,000 個 MAC 軟體授權",
+          recipient: "範例客戶股份有限公司",
+          period: "2026/01/01~2026/12/31",
+          cert_no: "W202611001",
+          issue_date: "",
+        },
+      });
+    }
+  });
+</script>
+{% endblock %}

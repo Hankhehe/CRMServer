@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block title %}SMTP 郵件伺服器設定 - CRM Server{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 1.5rem;">
+  <h1 style="font-size: 1.75rem; font-weight: 700; margin-bottom: 0.25rem;">
+    <i class="fa-solid fa-paper-plane" style="color: var(--primary);"></i> SMTP 郵件伺服器設定
+  </h1>
+  <p style="color: var(--text-muted); font-size: 0.95rem;">
+    設定關注客戶時發生「資料變更」或「新留言」通知信的 SMTP 外寄郵件伺服器連線參數
+  </p>
+</div>
+
+<div style="display: grid; grid-template-columns: minmax(360px, 680px) 1fr; gap: 1.5rem; align-items: flex-start;">
+  <!-- Left Column: Settings Form -->
+  <div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">
+          <i class="fa-solid fa-envelope-circle-check"></i> 外寄郵件伺服器 (SMTP) 參數
+        </div>
+      </div>
+
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="save_smtp">
+
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 0.85rem;">
+          <div class="form-group">
+            <label>SMTP 主機 (Host) <span style="color: #ef4444;">*</span></label>
+            {{ form.smtp_host }}
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">例如：smtp.office365.com 或 smtp.gmail.com</div>
+          </div>
+          <div class="form-group">
+            <label>連接埠 (Port) <span style="color: #ef4444;">*</span></label>
+            {{ form.smtp_port }}
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">常見為 587 (TLS) 或 465 (SSL)</div>
+          </div>
+        </div>
+
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1.25rem;">
+          <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-main); margin-bottom: 0.5rem;">傳輸加密模式</div>
+          <div style="display: flex; gap: 1.5rem; font-size: 0.875rem;">
+            <label style="display: inline-flex; align-items: center; cursor: pointer;">
+              {{ form.smtp_use_tls }} 啟用 STARTTLS (連接埠 587 建議勾選)
+            </label>
+            <label style="display: inline-flex; align-items: center; cursor: pointer;">
+              {{ form.smtp_use_ssl }} 啟用 SSL/TLS (連接埠 465 建議勾選)
+            </label>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem;">
+          <div class="form-group">
+            <label>SMTP 驗證帳號</label>
+            {{ form.smtp_user }}
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">外寄伺服器登入帳號或使用者全名信箱</div>
+          </div>
+          <div class="form-group">
+            <label>SMTP 驗證密碼</label>
+            {{ form.smtp_password }}
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">帳號密碼或應用程式專用密碼</div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>預設寄件者信箱 (From Email)</label>
+          {{ form.smtp_from_email }}
+          <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">收件者看到的寄件來源，若留空則預設採用 SMTP 驗證帳號</div>
+        </div>
+
+        <div class="form-group">
+          <label>系統外部網址 (Base URL)</label>
+          {{ form.site_base_url }}
+          <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">用於產生通知郵件內之客戶詳情超連結，例如 http://crm.company.com:8000</div>
+        </div>
+
+        <div style="margin-top: 1.5rem;">
+          <button type="submit" class="btn btn-primary" style="width: 100%;">
+            <i class="fa-solid fa-floppy-disk"></i> 儲存 SMTP 伺服器設定
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Right Column: Test Email and Guidance -->
+  <div>
+    <!-- Test Email Card -->
+    <div class="card" style="margin-bottom: 1.5rem;">
+      <div class="card-header">
+        <div class="card-title" style="font-size: 1.05rem;">
+          <i class="fa-solid fa-paper-plane" style="color: #059669;"></i> 發送連線測試信
+        </div>
+      </div>
+      <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 1rem; line-height: 1.6;">
+        儲存設定後，您可以在此輸入指定信箱立即進行即時連線發信測試，確認 SMTP 主機、認證帳密與 TLS 加密是否正常運作。
+      </p>
+
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="test_smtp">
+        <div class="form-group">
+          <label>測試收件信箱</label>
+          <input type="email" name="test_email" value="{{ request.user.email }}" class="form-control" placeholder="請輸入收件信箱，例如 your.name@company.com" required>
+        </div>
+        <button type="submit" class="btn btn-outline" style="width: 100%; justify-content: center; border-color: #059669; color: #059669;">
+          <i class="fa-regular fa-paper-plane"></i> 立即發送測試信
+        </button>
+      </form>
+    </div>
+
+    <!-- Configuration Tips Card -->
+    <div class="card" style="background: #f8fafc;">
+      <div class="card-header">
+        <div class="card-title" style="font-size: 1.05rem;">
+          <i class="fa-solid fa-circle-question" style="color: var(--primary);"></i> 常見設定參考指引
+        </div>
+      </div>
+      <div style="font-size: 0.85rem; line-height: 1.65; color: var(--text-main);">
+        <div style="margin-bottom: 0.85rem;">
+          <strong>Microsoft 365 (Exchange Online)</strong>
+          <ul style="margin: 0.25rem 0 0 1.25rem; color: var(--text-muted);">
+            <li>主機：<code>smtp.office365.com</code></li>
+            <li>連接埠：<code>587</code>，勾選 <code>STARTTLS</code></li>
+            <li>帳號：需具備信箱之完整帳號 (例如 <code>notify@company.com</code>)</li>
+          </ul>
+        </div>
+        <div style="margin-bottom: 0.85rem;">
+          <strong>Google Workspace / Gmail</strong>
+          <ul style="margin: 0.25rem 0 0 1.25rem; color: var(--text-muted);">
+            <li>主機：<code>smtp.gmail.com</code></li>
+            <li>連接埠：<code>587</code>，勾選 <code>STARTTLS</code></li>
+            <li>密碼：需在 Google 帳戶安全性中產生「應用程式專用密碼」填入</li>
+          </ul>
+        </div>
+        <div>
+          <strong>公司內部 Exchange / Postfix Relay</strong>
+          <ul style="margin: 0.25rem 0 0 1.25rem; color: var(--text-muted);">
+            <li>主機：內網 IP 或主機名稱 (例如 <code>192.168.1.25</code>)</li>
+            <li>連接埠：若為未驗證之內部 Relay 多為 <code>25</code></li>
+            <li>帳密：若免認證可留空</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,275 @@
+{% extends "base.html" %}
+
+{% block title %}系統備份與還原 - CRM Server{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem;">
+  <div>
+    <h1 style="font-size: 1.75rem; font-weight: 700; margin-bottom: 0.25rem;">
+      <i class="fa-solid fa-box-archive" style="color: var(--primary); margin-right: 0.5rem;"></i>資料備份與還原
+    </h1>
+    <p style="color: var(--text-muted); font-size: 0.95rem;">
+      完整備份 CRM 系統狀態（含資料庫數據與 media/ 附件檔案），支援打包下載與跨系統環境覆蓋還原。
+    </p>
+  </div>
+
+  <div style="display: flex; gap: 0.75rem;">
+    <form method="post" id="create-backup-form" onsubmit="handleCreateBackup(event)">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="create_backup">
+      <button type="submit" id="btn-create-backup" class="btn btn-primary" style="box-shadow: 0 4px 12px rgba(37,99,235,0.2);">
+        <i class="fa-solid fa-plus-circle"></i> <span id="create-btn-text">立即建立系統備份</span>
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- Alert Banner: Security notice -->
+<div style="background: #eff6ff; border-left: 4px solid var(--primary); padding: 1rem 1.25rem; border-radius: 6px; margin-bottom: 1.5rem; display: flex; gap: 1rem; align-items: flex-start;">
+  <i class="fa-solid fa-circle-info" style="color: var(--primary); font-size: 1.25rem; margin-top: 0.15rem;"></i>
+  <div style="font-size: 0.9rem; color: #1e3a8a; line-height: 1.5;">
+    <strong>備份與還原機制說明：</strong>
+    <ul style="margin: 0.35rem 0 0 1.2rem; padding: 0;">
+      <li>備份包（ZIP）內含系統<strong>完整資料庫（SQLite 檔案與通用 ORM 資料檔）</strong>及<strong>使用者上傳附件檔（media/）</strong>。</li>
+      <li>執行「還原」將採<strong>完全覆蓋</strong>目標系統之資料庫與附件檔，還原完成後系統將<strong>自動登出</strong>，請使用備份中的管理者帳號密碼登入。</li>
+      <li>如需排程自動備份，伺服器管理員可透過指令 <code>python manage.py backup_system</code> 搭配系統工作排程器執行。</li>
+    </ul>
+  </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 340px; gap: 1.5rem; align-items: flex-start;">
+  <!-- Left Column: Backup History Table -->
+  <div class="card">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+      <div class="card-title">
+        <i class="fa-solid fa-clock-rotate-left"></i> 伺服器端備份清單
+        <span class="badge badge-info" style="margin-left: 0.5rem; font-size: 0.8rem;">共 {{ total_backups }} 份</span>
+      </div>
+    </div>
+
+    {% if backups %}
+      <div class="table-responsive">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>備份檔案名稱</th>
+              <th>建立時間 (UTC+8)</th>
+              <th>來源 DB</th>
+              <th>附件數</th>
+              <th>檔案大小</th>
+              <th style="text-align: right; min-width: 190px;">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for b in backups %}
+              <tr>
+                <td>
+                  <div style="display: flex; align-items: center; gap: 0.6rem;">
+                    <i class="fa-solid fa-file-zipper fa-lg" style="color: #f59e0b;"></i>
+                    <span style="font-weight: 600; font-family: monospace;">{{ b.filename }}</span>
+                  </div>
+                </td>
+                <td style="color: var(--text-muted); font-size: 0.85rem;">
+                  {{ b.created_at_display }}
+                </td>
+                <td>
+                  <span class="badge {% if b.db_engine == 'mssql' %}badge-scrapped{% else %}badge-available{% endif %}">
+                    {{ b.db_engine|upper }}
+                  </span>
+                </td>
+                <td style="font-size: 0.85rem; color: var(--text-muted);">
+                  {{ b.media_files_count }} 個檔案
+                </td>
+                <td>
+                  <span class="badge" style="background: #f1f5f9; color: #334155;">{{ b.size_display }}</span>
+                </td>
+                <td style="text-align: right;">
+                  <!-- Download Form -->
+                  <form method="post" style="display: inline-block;">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="download_backup">
+                    <input type="hidden" name="filename" value="{{ b.filename }}">
+                    <button type="submit" class="btn btn-sm btn-outline" title="下載備份檔至本地端">
+                      <i class="fa-solid fa-download"></i> 下載
+                    </button>
+                  </form>
+
+                  <!-- Restore Button (Triggers Modal) -->
+                  <button type="button" class="btn btn-sm btn-warning" onclick="confirmServerRestore('{{ b.filename }}')" title="從此備份檔直接還原系統">
+                    <i class="fa-solid fa-rotate-left"></i> 還原
+                  </button>
+
+                  <!-- Delete Button (Triggers Modal) -->
+                  <button type="button" class="btn btn-sm btn-danger" onclick="confirmDeleteBackup('{{ b.filename }}')" title="刪除此備份檔">
+                    <i class="fa-solid fa-trash-can"></i>
+                  </button>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div style="padding: 3rem 1.5rem; text-align: center; color: var(--text-muted);">
+        <i class="fa-solid fa-box-open" style="font-size: 3rem; color: #cbd5e1; margin-bottom: 1rem; display: block;"></i>
+        <p style="font-size: 1rem; margin-bottom: 0.5rem; font-weight: 500;">目前伺服器端尚無留存備份檔案</p>
+        <p style="font-size: 0.85rem; color: var(--text-muted);">您可以點擊右上方的「立即建立系統備份」按鈕產出第一份備份包。</p>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Right Column: Upload & Restore Card -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">
+        <i class="fa-solid fa-cloud-arrow-up"></i> 本機備份檔上傳還原
+      </div>
+    </div>
+
+    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem; line-height: 1.4;">
+      若您需要將其他伺服器匯出的備份檔（.zip）還原至此系統，請在此選取備份檔案：
+    </p>
+
+    <form method="post" enctype="multipart/form-data" id="upload-restore-form" onsubmit="handleUploadRestore(event)">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="restore_from_upload">
+
+      <div class="form-group" style="margin-bottom: 1.25rem;">
+        <label for="backup_file" style="font-weight: 600; font-size: 0.85rem; display: block; margin-bottom: 0.4rem;">
+          選取 .zip 備份檔案
+        </label>
+        <input type="file" name="backup_file" id="backup_file" accept=".zip" class="form-control" required style="padding: 0.5rem;">
+      </div>
+
+      <div style="background: #fef2f2; border: 1px solid #fee2e2; border-radius: 6px; padding: 0.75rem; margin-bottom: 1.25rem; font-size: 0.8rem; color: #991b1b;">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <strong>注意：</strong>上傳還原將完全覆蓋當前資料庫與附件檔案，動作不可復原。
+      </div>
+
+      <button type="submit" id="btn-upload-restore" class="btn btn-danger" style="width: 100%;">
+        <i class="fa-solid fa-upload"></i> 上傳並執行還原
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Confirm Server Restore -->
+<div id="restore-server-modal" class="modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1050; align-items: center; justify-content: center;">
+  <div class="modal-dialog" style="background: #fff; border-radius: 12px; max-width: 480px; width: 90%; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.2);">
+    <div style="padding: 1.25rem 1.5rem; background: #fee2e2; border-bottom: 1px solid #fecaca; display: flex; align-items: center; gap: 0.75rem;">
+      <i class="fa-solid fa-triangle-exclamation" style="color: #dc2626; font-size: 1.5rem;"></i>
+      <h3 style="margin: 0; font-size: 1.15rem; color: #991b1b; font-weight: 700;">確認執行系統資料覆蓋還原？</h3>
+    </div>
+    <div style="padding: 1.5rem;">
+      <p style="font-size: 0.95rem; color: #374151; margin-bottom: 0.75rem;">
+        您即將使用以下備份檔還原系統：
+      </p>
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 0.6rem 0.8rem; border-radius: 6px; font-family: monospace; font-weight: 600; color: #1e293b; margin-bottom: 1rem;" id="modal-restore-filename">
+      </div>
+      <p style="font-size: 0.85rem; color: #b91c1c; margin-bottom: 1rem; line-height: 1.4;">
+        ⚠️ 此操作將清空並以備份檔<strong>完全覆蓋</strong>現有資料庫與附件檔案！完成後將自動登出。
+      </p>
+
+      <form method="post" id="server-restore-form" onsubmit="handleExecuteRestore(event)">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="restore_from_server">
+        <input type="hidden" name="filename" id="input-restore-filename" value="">
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+          <button type="button" class="btn btn-outline" onclick="closeModal('restore-server-modal')">取消</button>
+          <button type="submit" id="btn-execute-restore" class="btn btn-danger">
+            <i class="fa-solid fa-rotate-left"></i> 確認完全覆蓋還原
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Confirm Delete Backup -->
+<div id="delete-backup-modal" class="modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1050; align-items: center; justify-content: center;">
+  <div class="modal-dialog" style="background: #fff; border-radius: 12px; max-width: 440px; width: 90%; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.2);">
+    <div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; gap: 0.75rem;">
+      <i class="fa-solid fa-trash-can" style="color: #dc2626; font-size: 1.25rem;"></i>
+      <h3 style="margin: 0; font-size: 1.1rem; color: #1e293b; font-weight: 700;">刪除備份檔案</h3>
+    </div>
+    <div style="padding: 1.5rem;">
+      <p style="font-size: 0.95rem; color: #374151; margin-bottom: 0.75rem;">
+        確定要永久刪除此備份檔嗎？
+      </p>
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 0.5rem 0.75rem; border-radius: 6px; font-family: monospace; font-size: 0.9rem; color: #475569; margin-bottom: 1.25rem;" id="modal-delete-filename">
+      </div>
+
+      <form method="post" id="delete-backup-form">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="delete_backup">
+        <input type="hidden" name="filename" id="input-delete-filename" value="">
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+          <button type="button" class="btn btn-outline" onclick="closeModal('delete-backup-modal')">取消</button>
+          <button type="submit" class="btn btn-danger">確認刪除</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+function handleCreateBackup(e) {
+  const btn = document.getElementById('btn-create-backup');
+  const text = document.getElementById('create-btn-text');
+  btn.disabled = true;
+  btn.style.opacity = '0.7';
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 備份封裝中，請稍候...';
+}
+
+function confirmServerRestore(filename) {
+  document.getElementById('modal-restore-filename').textContent = filename;
+  document.getElementById('input-restore-filename').value = filename;
+  const modal = document.getElementById('restore-server-modal');
+  modal.style.display = 'flex';
+}
+
+function handleExecuteRestore(e) {
+  const btn = document.getElementById('btn-execute-restore');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 正在執行覆蓋還原...';
+}
+
+function handleUploadRestore(e) {
+  const fileInput = document.getElementById('backup_file');
+  if (!fileInput.files || fileInput.files.length === 0) {
+    alert('請先選取 .zip 備份檔案！');
+    e.preventDefault();
+    return false;
+  }
+  const ok = confirm('⚠️ 警告：確定要以「' + fileInput.files[0].name + '」完全覆蓋現有系統資料庫與附件檔案嗎？\n\n此動作不可復原！');
+  if (!ok) {
+    e.preventDefault();
+    return false;
+  }
+  const btn = document.getElementById('btn-upload-restore');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 上傳並還原中，請稍候...';
+}
+
+function confirmDeleteBackup(filename) {
+  document.getElementById('modal-delete-filename').textContent = filename;
+  document.getElementById('input-delete-filename').value = filename;
+  const modal = document.getElementById('delete-backup-modal');
+  modal.style.display = 'flex';
+}
+
+function closeModal(modalId) {
+  document.getElementById(modalId).style.display = 'none';
+}
+
+// Close modal on escape key
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    closeModal('restore-server-modal');
+    closeModal('delete-backup-modal');
+  }
+});
+</script>
+{% endblock %}

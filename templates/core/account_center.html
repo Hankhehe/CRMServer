@@ -1,0 +1,498 @@
+{% extends "base.html" %}
+{% load crm_tags %}
+
+{% block title %}個人帳號中心 - CRM Server{% endblock %}
+
+{% block content %}
+<style>
+  .center-tabs {
+    display: flex;
+    gap: 0.65rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--glass-border);
+    padding-bottom: 0.75rem;
+  }
+  .center-tab-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.65rem 1.25rem;
+    border-radius: 10px;
+    font-size: 0.92rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    background: white;
+    border: 1px solid var(--glass-border);
+    color: var(--text-muted);
+    transition: all 0.2s ease;
+  }
+  .center-tab-btn:hover {
+    color: var(--primary);
+    border-color: #cbd5e1;
+    background: #f8fafc;
+  }
+  .center-tab-btn.active {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.22);
+  }
+  .center-tab-btn .tab-badge {
+    font-size: 0.75rem;
+    padding: 0.1rem 0.5rem;
+    border-radius: 9999px;
+    background: rgba(15, 23, 42, 0.08);
+    color: inherit;
+  }
+  .center-tab-btn.active .tab-badge {
+    background: rgba(255, 255, 255, 0.22);
+    color: white;
+  }
+  .switch-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.25rem;
+    border-radius: 10px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    margin-bottom: 0.85rem;
+    gap: 1rem;
+  }
+  .switch-toggle {
+    position: relative;
+    display: inline-block;
+    width: 48px;
+    height: 26px;
+    flex-shrink: 0;
+  }
+  .switch-toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  .switch-slider {
+    position: absolute;
+    cursor: pointer;
+    inset: 0;
+    background-color: #cbd5e1;
+    transition: 0.25s;
+    border-radius: 34px;
+  }
+  .switch-slider:before {
+    position: absolute;
+    content: "";
+    height: 20px;
+    width: 20px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: 0.25s;
+    border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  }
+  .switch-toggle input:checked + .switch-slider {
+    background-color: var(--primary);
+  }
+  .switch-toggle input:checked + .switch-slider:before {
+    transform: translateX(22px);
+  }
+</style>
+
+<!-- Header & Summary Banner -->
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+  <div style="display: flex; align-items: center; gap: 1rem;">
+    <div style="width: 56px; height: 56px; border-radius: 14px; background: var(--primary-light); color: var(--primary); display: flex; align-items: center; justify-content: center; font-size: 1.65rem; font-weight: 700;">
+      <i class="fa-solid fa-id-card-clip"></i>
+    </div>
+    <div>
+      <h1 style="font-size: 1.75rem; font-weight: 700; margin-bottom: 0.2rem;">
+        個人帳號中心
+      </h1>
+      <div style="color: var(--text-muted); font-size: 0.92rem; display: flex; align-items: center; gap: 0.65rem; flex-wrap: wrap;">
+        <span>登入帳號：<strong style="color: var(--text-main); font-family: monospace;">{{ request.user.username }}</strong></span>
+        <span>•</span>
+        <span>角色：<span class="role-badge">{{ user_role }}</span></span>
+        <span>•</span>
+        <span>通知信箱：
+          {% if request.user.email %}
+            <strong style="color: var(--primary);">{{ request.user.email }}</strong>
+          {% else %}
+            <span style="color: #dc2626; font-weight: 600;"><i class="fa-solid fa-circle-exclamation"></i> 尚未設定信箱</span>
+          {% endif %}
+        </span>
+      </div>
+    </div>
+  </div>
+  <div>
+    {% if not profile.distinguished_name %}
+      <a href="{% url 'change-own-password' %}" class="btn btn-outline">
+        <i class="fa-solid fa-key"></i> 修改登入密碼
+      </a>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Navigation Tabs -->
+<div class="center-tabs">
+  {% if can_view_crm %}
+  <button type="button" class="center-tab-btn {% if active_tab == 'followed' %}active{% endif %}" onclick="switchCenterTab('followed')" id="tab-btn-followed">
+    <i class="fa-solid fa-star" style="color: {% if active_tab == 'followed' %}#fde047{% else %}#f59e0b{% endif %};"></i>
+    <span>我關注的客戶</span>
+    <span class="tab-badge">{{ total_followed_count }}</span>
+  </button>
+
+  <button type="button" class="center-tab-btn {% if active_tab == 'comments' %}active{% endif %}" onclick="switchCenterTab('comments')" id="tab-btn-comments">
+    <i class="fa-solid fa-comments"></i>
+    <span>我發表過的留言</span>
+    <span class="tab-badge">{{ total_comments_count }}</span>
+  </button>
+  {% endif %}
+
+  <button type="button" class="center-tab-btn {% if active_tab == 'settings' %}active{% endif %}" onclick="switchCenterTab('settings')" id="tab-btn-settings">
+    <i class="fa-solid fa-envelope-open-text"></i>
+    <span>個人資料與 Email 通知設定</span>
+    {% if profile.receive_email_notifications %}
+      <span class="tab-badge">收信開啟中</span>
+    {% else %}
+      <span class="tab-badge">已關閉收信</span>
+    {% endif %}
+  </button>
+</div>
+
+{% if can_view_crm %}
+<!-- ==================== TAB 1: 我關注的客戶 ==================== -->
+<div id="tab-pane-followed" style="display: {% if active_tab == 'followed' %}block{% else %}none{% endif %};">
+  <div class="card">
+    <div class="card-header" style="flex-wrap: wrap; gap: 1rem;">
+      <div class="card-title">
+        <i class="fa-solid fa-star" style="color: #f59e0b;"></i>
+        我關注的客戶清單 ({{ followed_records.count }} 筆)
+      </div>
+      <form method="get" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+        <input type="hidden" name="tab" value="followed">
+        <div style="position: relative; min-width: 240px;">
+          <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 0.85rem; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 0.85rem;"></i>
+          <input type="text" name="q_followed" value="{{ q_followed }}" class="form-control" style="padding-left: 2.25rem; font-size: 0.875rem;" placeholder="搜尋關注客戶代號、名稱或聯絡人...">
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm">搜尋</button>
+        {% if q_followed %}
+          <a href="{% url 'account-center' %}?tab=followed" class="btn btn-outline btn-sm">清除</a>
+        {% endif %}
+      </form>
+    </div>
+
+    {% if followed_records %}
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>客戶代號/統編</th>
+              <th>客戶名稱</th>
+              <th>主要聯絡人</th>
+              <th>聯絡電話</th>
+              <th>維護合約狀態</th>
+              <th>總關注人數</th>
+              <th>我開始關注時間</th>
+              <th style="text-align: right;">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for rec in followed_records %}
+              {% with c=rec.customer %}
+                <tr>
+                  <td>
+                    <span style="font-family: monospace; font-weight: 700; color: var(--primary);">{{ c.code }}</span>
+                  </td>
+                  <td>
+                    <a href="{% url 'customer-detail' c.pk %}" style="font-weight: 600; color: var(--text-main); text-decoration: none;">
+                      {{ c.name }}
+                    </a>
+                    {% if c.tax_id %}
+                      <span style="font-size: 0.75rem; color: var(--text-muted); display: block;">統編: {{ c.tax_id }}</span>
+                    {% endif %}
+                  </td>
+                  <td>{{ c.contact|default:"-" }}</td>
+                  <td>{{ c.phone|default:"-" }}</td>
+                  <td>
+                    <span class="badge {{ c.contract_badge_class }}">
+                      {{ c.contract_status_display }}
+                    </span>
+                  </td>
+                  <td>
+                    <span class="badge badge-secondary">
+                      <i class="fa-solid fa-users"></i> {{ c.followers.count }} 人關注
+                    </span>
+                  </td>
+                  <td style="font-size: 0.85rem; color: var(--text-muted);">{{ rec.created_at|date:"Y-m-d H:i" }}</td>
+                  <td style="text-align: right;">
+                    <div style="display: inline-flex; gap: 0.4rem;">
+                      <a href="{% url 'customer-detail' c.pk %}" class="btn btn-outline btn-sm">
+                        <i class="fa-solid fa-eye"></i> 進入詳情
+                      </a>
+                      {% if not is_followed_only_scope %}
+                      <form method="post" action="{% url 'customer-follow-toggle' c.pk %}" style="display: inline;" onsubmit="return confirm('確定要取消關注客戶「{{ c.name|escapejs }}」嗎？');">
+                        {% csrf_token %}
+                        <input type="hidden" name="next" value="{% url 'account-center' %}?tab=followed">
+                        <button type="submit" class="btn btn-outline btn-sm" style="color: #dc2626;" title="取消關注">
+                          <i class="fa-regular fa-star"></i> 取消關注
+                        </button>
+                      </form>
+                      {% endif %}
+                    </div>
+                  </td>
+                </tr>
+              {% endwith %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div style="text-align: center; padding: 3rem 1.5rem; color: var(--text-muted);">
+        <i class="fa-regular fa-star fa-3x" style="color: #cbd5e1; margin-bottom: 0.75rem; display: block;"></i>
+        <div style="font-size: 1.05rem; font-weight: 600; color: var(--text-main); margin-bottom: 0.35rem;">
+          {% if q_followed %}查無符合搜尋條件的關注客戶{% else %}您目前尚未關注任何客戶{% endif %}
+        </div>
+        <div style="font-size: 0.9rem; margin-bottom: 1.25rem;">
+          您可以前往「客戶名冊」或任一「客戶詳情」頁面點擊星號「關注客戶」，隨時掌握該客戶的資料變更與新留言通知。
+        </div>
+        <a href="{% url 'customer-list' %}" class="btn btn-primary btn-sm">
+          <i class="fa-solid fa-building-user"></i> 前往客戶名冊挑選關注
+        </a>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ==================== TAB 2: 我發表過的留言 ==================== -->
+<div id="tab-pane-comments" style="display: {% if active_tab == 'comments' %}block{% else %}none{% endif %};">
+  <div class="card">
+    <div class="card-header" style="flex-wrap: wrap; gap: 1rem;">
+      <div class="card-title">
+        <i class="fa-solid fa-comments" style="color: var(--primary);"></i>
+        我發表過的留言與執行軌跡紀錄 (共 {{ filtered_comments_count }} 則)
+      </div>
+      <form method="get" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+        <input type="hidden" name="tab" value="comments">
+        <div style="position: relative; min-width: 240px;">
+          <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 0.85rem; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 0.85rem;"></i>
+          <input type="text" name="q_comments" value="{{ q_comments }}" class="form-control" style="padding-left: 2.25rem; font-size: 0.875rem;" placeholder="搜尋留言內容、客戶名稱或代號...">
+        </div>
+        <select name="comment_type" class="form-control" style="width: auto; font-size: 0.875rem;">
+          <option value="">全部紀錄類型</option>
+          {% for val, label in activity_type_choices %}
+            <option value="{{ val }}" {% if comment_type == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-primary btn-sm">篩選</button>
+        {% if q_comments or comment_type %}
+          <a href="{% url 'account-center' %}?tab=comments" class="btn btn-outline btn-sm">清除</a>
+        {% endif %}
+      </form>
+    </div>
+
+    {% if comments_page %}
+      <div style="display: flex; flex-direction: column; gap: 1rem;">
+        {% for log in comments_page %}
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.15rem 1.35rem; transition: border-color 0.2s;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.65rem; padding-bottom: 0.55rem; border-bottom: 1px solid #e2e8f0;">
+              <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+                <a href="{% url 'customer-detail' log.customer.pk %}#activity-log-{{ log.pk }}" style="font-weight: 700; font-size: 1rem; color: var(--primary); text-decoration: none; display: inline-flex; align-items: center; gap: 0.4rem;">
+                  <i class="fa-solid fa-building"></i>
+                  <span>{{ log.customer.name }} ({{ log.customer.code }})</span>
+                </a>
+                <span class="badge {{ log.badge_class }}">
+                  <i class="{{ log.icon_class }}"></i> {{ log.get_activity_type_display }}
+                </span>
+                {% if log.contact %}
+                  <span class="badge badge-secondary">
+                    <i class="fa-solid fa-user-tie"></i> 窗口: {{ log.contact.name }}
+                  </span>
+                {% endif %}
+                {% if log.follow_up_date %}
+                  <span class="badge badge-loaned">
+                    <i class="fa-solid fa-calendar-check"></i> 跟進日: {{ log.follow_up_date|date:"Y-m-d" }}
+                  </span>
+                {% endif %}
+              </div>
+              <div style="display: flex; align-items: center; gap: 0.75rem; font-size: 0.82rem; color: var(--text-muted);">
+                <span><i class="fa-regular fa-clock"></i> {{ log.created_at|date:"Y-m-d H:i" }}</span>
+                {% if log.is_edited %}
+                  <span>(已編輯)</span>
+                {% endif %}
+                <a href="{% url 'customer-detail' log.customer.pk %}#activity-log-{{ log.pk }}" class="btn btn-outline btn-sm" style="padding: 0.2rem 0.6rem; font-size: 0.75rem;">
+                  <i class="fa-solid fa-arrow-up-right-from-square"></i> 前往該留言
+                </a>
+              </div>
+            </div>
+
+            <div style="font-size: 0.92rem; line-height: 1.65; color: var(--text-main); white-space: pre-wrap; word-break: break-word;">{{ log.content }}</div>
+
+            {% if log.attachments.all %}
+              <div style="margin-top: 0.65rem; padding-top: 0.5rem; border-top: 1px dashed #cbd5e1; display: flex; flex-wrap: wrap; gap: 0.4rem;">
+                {% for att in log.attachments.all %}
+                  <a href="{{ att.file.url }}" target="_blank" style="font-size: 0.78rem; color: var(--primary); background: white; border: 1px solid #cbd5e1; padding: 0.2rem 0.6rem; border-radius: 6px; text-decoration: none;">
+                    <i class="fa-solid fa-paperclip"></i> {{ att.filename }} ({{ att.formatted_size }})
+                  </a>
+                {% endfor %}
+              </div>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+
+      {% if comments_page.has_other_pages %}
+        <div class="pagination-bar">
+          <div>共 <strong>{{ filtered_comments_count }}</strong> 則留言，目前顯示第 {{ comments_page.number }} / {{ comments_page.paginator.num_pages }} 頁</div>
+          <div style="display: flex; gap: 0.5rem;">
+            {% if comments_page.has_previous %}
+              <a href="?tab=comments&q_comments={{ q_comments }}&comment_type={{ comment_type }}&cpage={{ comments_page.previous_page_number }}" class="btn btn-outline btn-sm">&laquo; 上一頁</a>
+            {% endif %}
+            <span class="btn btn-outline btn-sm" style="cursor: default;">{{ comments_page.number }}</span>
+            {% if comments_page.has_next %}
+              <a href="?tab=comments&q_comments={{ q_comments }}&comment_type={{ comment_type }}&cpage={{ comments_page.next_page_number }}" class="btn btn-outline btn-sm">下一頁 &raquo;</a>
+            {% endif %}
+          </div>
+        </div>
+      {% endif %}
+    {% else %}
+      <div style="text-align: center; padding: 3rem 1.5rem; color: var(--text-muted);">
+        <i class="fa-regular fa-comment-dots fa-3x" style="color: #cbd5e1; margin-bottom: 0.75rem; display: block;"></i>
+        <div style="font-size: 1.05rem; font-weight: 600; color: var(--text-main); margin-bottom: 0.35rem;">
+          {% if q_comments or comment_type %}查無符合篩選條件的留言紀錄{% else %}您目前尚未發表過任何客戶留言{% endif %}
+        </div>
+        <div style="font-size: 0.9rem;">
+          您在任一客戶詳情頁「客戶執行軌跡與討論歷程」中發表的會議記錄、電話拜訪、技術支援或備註都會自動彙整於此。
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<!-- ==================== TAB 3: 個人資料與 Email 通知設定 ==================== -->
+<div id="tab-pane-settings" style="display: {% if active_tab == 'settings' %}block{% else %}none{% endif %};">
+  <div class="card" style="max-width: 780px;">
+    <div class="card-header">
+      <div class="card-title">
+        <i class="fa-solid fa-envelope-open-text" style="color: var(--primary);"></i>
+        個人基本資料與關注客戶 Email 通知設定
+      </div>
+    </div>
+
+    <form method="post" action="{% url 'account-center' %}?tab=settings">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="save_preferences">
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.25rem;">
+        <div class="form-group" style="margin-bottom: 0;">
+          <label>姓氏 (Last Name)</label>
+          {{ pref_form.last_name }}
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label>名字 / 顯示名稱 (First Name)</label>
+          {{ pref_form.first_name }}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>接收通知之電子郵件 (Email) <span style="color: var(--primary); font-weight: 500; font-size: 0.8rem;">(系統將寄送關注客戶異動與留言通知至此信箱)</span></label>
+        {{ pref_form.email }}
+        {% if pref_form.email.errors %}
+          <div style="color: #dc2626; font-size: 0.82rem; margin-top: 0.25rem;">{{ pref_form.email.errors|join:", " }}</div>
+        {% endif %}
+      </div>
+
+      <div style="margin: 1.5rem 0 1rem; font-weight: 700; font-size: 1rem; color: var(--text-main); display: flex; align-items: center; gap: 0.5rem;">
+        <i class="fa-solid fa-bell" style="color: var(--primary);"></i> Email 通知偏好設定
+      </div>
+
+      <!-- 總開關 -->
+      <div class="switch-row" style="border-left: 4px solid var(--primary);">
+        <div>
+          <div style="font-weight: 700; font-size: 0.95rem; color: var(--text-main);">
+            接收關注客戶的 Email 通知 (總開關)
+          </div>
+          <div style="font-size: 0.825rem; color: var(--text-muted); margin-top: 0.2rem;">
+            開啟後，當您關注的客戶有新動態時會寄發 Email 給您；若關閉此總開關，將不會收到任何關注通知信。
+          </div>
+        </div>
+        <label class="switch-toggle">
+          <input type="checkbox" name="receive_email_notifications" id="id_receive_email_notifications" {% if pref_form.receive_email_notifications.value %}checked{% endif %} onchange="updateSubSwitchesState()">
+          <span class="switch-slider"></span>
+        </label>
+      </div>
+
+      <!-- 子開關 1: 新留言 -->
+      <div class="switch-row" id="sub-switch-comment" style="margin-left: 1.25rem;">
+        <div>
+          <div style="font-weight: 600; font-size: 0.92rem; color: var(--text-main);">
+            <i class="fa-regular fa-comment-dots" style="color: var(--primary); margin-right: 4px;"></i>
+            當關注客戶有「新留言 / 執行軌跡更新」時寄信通知我
+          </div>
+          <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem;">
+            包含其他同仁在該客戶頁面新增或編輯會議記錄、電話拜訪、需求溝通、技術支援、報價討論等紀錄（您本人的操作不會寄給自己）。
+          </div>
+        </div>
+        <label class="switch-toggle">
+          <input type="checkbox" name="notify_on_new_comment" id="id_notify_on_new_comment" {% if pref_form.notify_on_new_comment.value %}checked{% endif %}>
+          <span class="switch-slider"></span>
+        </label>
+      </div>
+
+      <!-- 子開關 2: 資料變更 -->
+      <div class="switch-row" id="sub-switch-data" style="margin-left: 1.25rem;">
+        <div>
+          <div style="font-weight: 600; font-size: 0.92rem; color: var(--text-main);">
+            <i class="fa-solid fa-file-pen" style="color: #059669; margin-right: 4px;"></i>
+            當關注客戶有「客戶資料 / 聯絡人 / 維護合約 / 軟體授權 / 硬體設備異動」時寄信通知我
+          </div>
+          <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem;">
+            包含基本資料更新、環境架構區塊變更、聯絡窗口異動、維護合約新增/修改/換機、授權與硬體設備配發或退回（您本人的操作不會寄給自己）。
+          </div>
+        </div>
+        <label class="switch-toggle">
+          <input type="checkbox" name="notify_on_data_change" id="id_notify_on_data_change" {% if pref_form.notify_on_data_change.value %}checked{% endif %}>
+          <span class="switch-slider"></span>
+        </label>
+      </div>
+
+      <div style="margin-top: 1.5rem; display: flex; justify-content: flex-end;">
+        <button type="submit" class="btn btn-primary">
+          <i class="fa-solid fa-floppy-disk"></i> 儲存個人資料與通知設定
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  function switchCenterTab(tabName) {
+    ['followed', 'comments', 'settings'].forEach(t => {
+      const pane = document.getElementById('tab-pane-' + t);
+      const btn = document.getElementById('tab-btn-' + t);
+      if (pane) pane.style.display = (t === tabName) ? 'block' : 'none';
+      if (btn) btn.classList.toggle('active', t === tabName);
+    });
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', tabName);
+      window.history.replaceState({}, '', url.toString());
+    } catch (e) {}
+  }
+
+  function updateSubSwitchesState() {
+    const master = document.getElementById('id_receive_email_notifications');
+    const sub1 = document.getElementById('sub-switch-comment');
+    const sub2 = document.getElementById('sub-switch-data');
+    if (!master) return;
+    const enabled = master.checked;
+    if (sub1) sub1.style.opacity = enabled ? '1' : '0.5';
+    if (sub2) sub2.style.opacity = enabled ? '1' : '0.5';
+  }
+
+  document.addEventListener('DOMContentLoaded', updateSubSwitchesState);
+</script>
+{% endblock %}

@@ -1,0 +1,422 @@
+{% extends "base.html" %}
+
+{% block title %}資料庫切換與遷移 - CRM Server{% endblock %}
+
+{% block content %}
+<style>
+  .db-tabs-header {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 1.25rem;
+  }
+  .db-tab-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.65rem 1.25rem;
+    border-radius: 10px;
+    font-size: 0.92rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid #e2e8f0;
+    background: #ffffff;
+    color: #64748b;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    user-select: none;
+  }
+  .db-tab-btn:hover:not(.active) {
+    background: #f8fafc;
+    color: #0f172a;
+    border-color: #cbd5e1;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.06);
+  }
+  .db-tab-btn.active {
+    background: var(--primary);
+    color: #ffffff;
+    border-color: var(--primary);
+    box-shadow: 0 4px 14px rgba(79, 70, 229, 0.3);
+    transform: translateY(-1px);
+  }
+  .db-tab-btn.active i {
+    color: #ffffff;
+  }
+  .db-tab-btn:not(.active) i {
+    color: #94a3b8;
+  }
+  .db-tab-btn:active {
+    transform: scale(0.97);
+  }
+  .db-tab-panel {
+    animation: tabFadeIn 0.22s ease-out;
+  }
+  @keyframes tabFadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .db-tab-indicator {
+    font-size: 0.72rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 9999px;
+    font-weight: 600;
+    background: rgba(16, 185, 129, 0.15);
+    color: #059669;
+    border: 1px solid rgba(16, 185, 129, 0.25);
+  }
+  .db-tab-btn.active .db-tab-indicator {
+    background: rgba(255, 255, 255, 0.25);
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.4);
+  }
+  .feedback-box {
+    margin-top: 1rem;
+    padding: 0.85rem 1rem;
+    border-radius: 8px;
+    font-size: 0.88rem;
+    line-height: 1.4;
+    transition: all 0.2s ease;
+  }
+</style>
+
+<div style="margin-bottom: 1.5rem;">
+  <h1 style="font-size: 1.75rem; font-weight: 700; margin-bottom: 0.25rem;">資料庫轉移與切換 (Database Switcher)</h1>
+  <p style="color: var(--text-muted); font-size: 0.95rem;">支援 SQLite 本地資料庫、PostgreSQL (Postgres DB) 與 Microsoft SQL Server 企業資料庫之間的設定與切換</p>
+</div>
+
+<div style="display: grid; grid-template-columns: 320px 1fr; gap: 1.5rem; align-items: flex-start;">
+  <!-- Left Column: Status -->
+  <div class="card">
+    <h3 style="font-size: 1.1rem; margin-bottom: 1rem;"><i class="fa-solid fa-server"></i> 目前運作狀態</h3>
+    <div style="margin-bottom: 1.25rem;">
+      {% if current_db == 'postgres' %}
+        <span class="badge" style="background: rgba(37, 99, 235, 0.15); color: #2563eb; font-size: 0.9rem; padding: 0.5rem 1rem; border: 1px solid rgba(37, 99, 235, 0.3);">
+          <i class="fa-solid fa-database"></i> 目前連線：PostgreSQL
+        </span>
+      {% elif current_db == 'mssql' %}
+        <span class="badge badge-scrapped" style="font-size: 0.9rem; padding: 0.5rem 1rem;">
+          <i class="fa-solid fa-database"></i> 目前連線：MS SQL Server
+        </span>
+      {% else %}
+        <span class="badge badge-available" style="font-size: 0.9rem; padding: 0.5rem 1rem;">
+          <i class="fa-solid fa-database"></i> 目前連線：SQLite3 (本地檔案)
+        </span>
+      {% endif %}
+    </div>
+
+    <!-- Python Driver Status -->
+    <div style="background: #f8fafc; padding: 0.85rem; border-radius: 8px; margin-bottom: 1.25rem; font-size: 0.85rem;">
+      <div style="font-weight: 600; margin-bottom: 0.4rem;">資料庫驅動套件狀態：</div>
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.3rem;">
+        <span>PostgreSQL (psycopg2):</span>
+        {% if has_psycopg2 %}
+          <span style="color: #16a34a; font-weight: 600;"><i class="fa-solid fa-check-circle"></i> 已安裝</span>
+        {% else %}
+          <span style="color: #dc2626; font-weight: 600;"><i class="fa-solid fa-circle-exclamation"></i> 未安裝</span>
+        {% endif %}
+      </div>
+      <div style="display: flex; align-items: center; justify-content: space-between;">
+        <span>MS SQL (ODBC/pyodbc):</span>
+        {% if drivers %}
+          <span style="color: #16a34a; font-weight: 600;"><i class="fa-solid fa-check-circle"></i> {{ drivers|length }} 個驅動</span>
+        {% else %}
+          <span style="color: #ea580c; font-weight: 600;"><i class="fa-solid fa-triangle-exclamation"></i> 無驅動</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="run_migrations">
+        <button type="submit" class="btn btn-outline" style="width: 100%;">
+          <i class="fa-solid fa-arrows-rotate"></i> 套用資料庫 Migrations
+        </button>
+      </form>
+
+      {% if current_db != 'sqlite' %}
+        <form method="post" onsubmit="return confirm('【切換回 SQLite 本地庫】\n系統將清空舊有 db.sqlite3、自動建立資料表結構並將當前資料庫的所有最新資料無損轉回 SQLite，並即時切換。\n\n確定要切換回 SQLite 嗎？');">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="switch_to_sqlite">
+          <button type="submit" class="btn btn-outline" style="width: 100%; color: #475569;">
+            <i class="fa-solid fa-arrow-rotate-left"></i> 清除重建並轉移至 SQLite
+          </button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Right Column: Database Config Tabs -->
+  <div>
+    <!-- Tabs Header -->
+    <div class="db-tabs-header">
+      <button type="button" class="db-tab-btn {% if current_db != 'mssql' %}active{% endif %}" id="tab-btn-postgres" onclick="switchTab('postgres')">
+        <i class="fa-solid fa-database"></i>
+        <span>PostgreSQL (推薦)</span>
+        {% if current_db == 'postgres' %}
+          <span class="db-tab-indicator"><i class="fa-solid fa-check"></i> 使用中</span>
+        {% endif %}
+      </button>
+      <button type="button" class="db-tab-btn {% if current_db == 'mssql' %}active{% endif %}" id="tab-btn-mssql" onclick="switchTab('mssql')">
+        <i class="fa-solid fa-server"></i>
+        <span>MS SQL Server</span>
+        {% if current_db == 'mssql' %}
+          <span class="db-tab-indicator"><i class="fa-solid fa-check"></i> 使用中</span>
+        {% endif %}
+      </button>
+    </div>
+
+    <!-- PostgreSQL Form Card -->
+    <div class="card db-tab-panel" id="tab-content-postgres" style="{% if current_db == 'mssql' %}display: none;{% endif %}">
+      <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <div class="card-title">
+          <i class="fa-solid fa-database" style="color: #2563eb;"></i> PostgreSQL 連線設定與轉換
+        </div>
+        {% if not has_psycopg2 %}
+          <span class="badge" style="background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; font-size: 0.8rem;">
+            需安裝 psycopg2-binary
+          </span>
+        {% endif %}
+      </div>
+
+      {% if not has_psycopg2 %}
+        <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 0.85rem 1rem; margin-bottom: 1.25rem; font-size: 0.9rem; color: #92400e;">
+          <i class="fa-solid fa-circle-info"></i> <strong>提示：</strong> 目前 Python 環境尚未安裝 <code>psycopg2-binary</code> 驅動套件，請先同意安裝該套件後即可進行 PostgreSQL 連線測試與切換。
+        </div>
+      {% endif %}
+
+      <form method="post" id="postgres-form">
+        {% csrf_token %}
+        <input type="hidden" name="action" id="postgres-action-input" value="switch_to_postgres">
+
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1rem;">
+          <div class="form-group">
+            <label>主機位址 (Host / IP) <span style="color: #ef4444;">*</span></label>
+            <input type="text" name="host" class="form-control" value="{{ postgres_info.host|default:'127.0.0.1' }}" required>
+          </div>
+          <div class="form-group">
+            <label>連接埠 (Port) <span style="color: #ef4444;">*</span></label>
+            <input type="text" name="port" class="form-control" value="{{ postgres_info.port|default:'5432' }}" required>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>資料庫名稱 (Database Name) <span style="color: #ef4444;">*</span></label>
+          <input type="text" name="name" class="form-control" value="{{ postgres_info.name|default:'CRMServerDB' }}" placeholder="例如: CRMServerDB" required>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div class="form-group">
+            <label>使用者帳號 (Username) <span style="color: #ef4444;">*</span></label>
+            <input type="text" name="user" class="form-control" value="{{ postgres_info.user|default:'postgres' }}" required>
+          </div>
+          <div class="form-group">
+            <label>密碼 (Password)</label>
+            <input type="password" name="password" class="form-control" value="{{ postgres_info.password|default:'' }}" placeholder="若無密碼可留空">
+          </div>
+        </div>
+
+        <!-- Connection Test Feedback Alert -->
+        <div id="postgres-feedback" class="feedback-box" style="display: none;"></div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--glass-border); flex-wrap: wrap; gap: 0.75rem;">
+          <button type="button" class="btn btn-outline" id="btn-test-postgres" onclick="testPostgresConnection()">
+            <i class="fa-solid fa-plug"></i> 測試連線
+          </button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-postgres" onclick="return confirm('【全自動清除重建與轉移】\n系統將會：\n1. 完整導出目前運作中資料庫的所有商務資料\n2. 清除並重新建立目標 PostgreSQL 資料庫 (DROP & CREATE)\n3. 自動建立全部資料表結構 (Migrate)\n4. 將現有資料無損匯入目標庫並重整主鍵序號\n5. 立即熱切換生效 (無需手動重啟 Docker)\n\n確定要開始執行切換嗎？');">
+            <i class="fa-solid fa-bolt"></i> 清除重建、轉移資料並切換至 PostgreSQL
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- MSSQL Form Card -->
+    <div class="card db-tab-panel" id="tab-content-mssql" style="{% if current_db != 'mssql' %}display: none;{% endif %}">
+      <div class="card-header">
+        <div class="card-title">
+          <i class="fa-solid fa-server"></i> MS SQL Server 連線設定與轉移
+        </div>
+      </div>
+
+      <form method="post" id="mssql-form">
+        {% csrf_token %}
+        <input type="hidden" name="action" id="action-input" value="test_connection">
+
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1rem;">
+          <div class="form-group">
+            <label>主機位址 (Host / IP)</label>
+            <input type="text" name="host" class="form-control" value="{{ mssql_info.host|default:'127.0.0.1' }}" required>
+          </div>
+          <div class="form-group">
+            <label>連接埠 (Port)</label>
+            <input type="text" name="port" class="form-control" value="{{ mssql_info.port|default:'1433' }}" required>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>資料庫名稱 (Database Name)</label>
+          <input type="text" name="name" class="form-control" value="{{ mssql_info.name|default:'CRMServerDB' }}" required>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div class="form-group">
+            <label>登入帳號 (Username)</label>
+            <input type="text" name="user" class="form-control" value="{{ mssql_info.user|default:'sa' }}" required>
+          </div>
+          <div class="form-group">
+            <label>登入密碼 (Password)</label>
+            <input type="password" name="password" class="form-control" value="{{ mssql_info.password|default:'' }}" required>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>ODBC 驅動程式 (Driver)</label>
+          <select name="driver" class="form-control">
+            {% for d in drivers %}
+              <option value="{{ d }}" {% if mssql_info.driver == d or "SQL Server" in d %}selected{% endif %}>{{ d }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Connection Test Feedback Alert -->
+        <div id="mssql-feedback" class="feedback-box" style="display: none;"></div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--glass-border); flex-wrap: wrap; gap: 0.75rem;">
+          <button type="button" class="btn btn-outline" id="btn-test-mssql" onclick="testMssqlConnection()">
+            <i class="fa-solid fa-plug"></i> 測試連線
+          </button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-mssql" onclick="document.getElementById('action-input').value='switch_to_mssql'; return confirm('【全自動清除重建與轉移】\n系統將會：\n1. 完整導出目前運作中資料庫的所有商務資料\n2. 清除並重新建立目標 MS SQL 資料庫 (DROP & CREATE)\n3. 自動建立全部資料表結構 (Migrate)\n4. 將現有資料無損匯入目標庫並重整主鍵序號\n5. 立即熱切換生效 (無需手動重啟 Docker)\n\n確定要開始執行切換嗎？');">
+            <i class="fa-solid fa-bolt"></i> 清除重建、轉移資料並切換至 MS SQL
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  function switchTab(type) {
+    const postTab = document.getElementById('tab-content-postgres');
+    const mssqlTab = document.getElementById('tab-content-mssql');
+    const postBtn = document.getElementById('tab-btn-postgres');
+    const mssqlBtn = document.getElementById('tab-btn-mssql');
+
+    if (type === 'postgres') {
+      postTab.style.display = 'block';
+      mssqlTab.style.display = 'none';
+      postBtn.classList.add('active');
+      mssqlBtn.classList.remove('active');
+    } else {
+      postTab.style.display = 'none';
+      mssqlTab.style.display = 'block';
+      postBtn.classList.remove('active');
+      mssqlBtn.classList.add('active');
+    }
+  }
+
+  function testPostgresConnection() {
+    const form = document.getElementById('postgres-form');
+    const btn = document.getElementById('btn-test-postgres');
+    const feedback = document.getElementById('postgres-feedback');
+    const originalHtml = btn.innerHTML;
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> 測試連線中...';
+    feedback.style.display = 'none';
+
+    const formData = new FormData(form);
+    formData.set('action', 'test_postgres_connection');
+
+    fetch("{% url 'db-migration' %}", {
+      method: 'POST',
+      body: formData,
+    })
+    .then(r => r.json())
+    .then(data => {
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
+      feedback.style.display = 'flex';
+      feedback.style.alignItems = 'center';
+      feedback.style.gap = '0.6rem';
+      if (data.success) {
+        feedback.style.background = '#f0fdf4';
+        feedback.style.border = '1px solid #bbf7d0';
+        feedback.style.color = '#15803d';
+        feedback.innerHTML = '<i class="fa-solid fa-circle-check" style="font-size: 1.15rem;"></i> <div><strong>連線成功：</strong>' + data.message + '</div>';
+      } else {
+        feedback.style.background = '#fef2f2';
+        feedback.style.border = '1px solid #fecaca';
+        feedback.style.color = '#b91c1c';
+        feedback.innerHTML = '<i class="fa-solid fa-circle-xmark" style="font-size: 1.15rem;"></i> <div><strong>連線失敗：</strong>' + data.message + '</div>';
+      }
+    })
+    .catch(err => {
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
+      feedback.style.display = 'flex';
+      feedback.style.alignItems = 'center';
+      feedback.style.gap = '0.6rem';
+      feedback.style.background = '#fef2f2';
+      feedback.style.border = '1px solid #fecaca';
+      feedback.style.color = '#b91c1c';
+      feedback.innerHTML = '<i class="fa-solid fa-triangle-exclamation" style="font-size: 1.15rem;"></i> <div><strong>測試發生異常：</strong>' + err + '</div>';
+    });
+  }
+
+  function testMssqlConnection() {
+    const form = document.getElementById('mssql-form');
+    const btn = document.getElementById('btn-test-mssql');
+    const feedback = document.getElementById('mssql-feedback');
+    const originalHtml = btn.innerHTML;
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> 測試連線中...';
+    feedback.style.display = 'none';
+
+    const formData = new FormData(form);
+    formData.set('action', 'test_connection');
+
+    fetch("{% url 'db-migration' %}", {
+      method: 'POST',
+      body: formData,
+    })
+    .then(r => r.json())
+    .then(data => {
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
+      feedback.style.display = 'flex';
+      feedback.style.alignItems = 'center';
+      feedback.style.gap = '0.6rem';
+      if (data.success) {
+        feedback.style.background = '#f0fdf4';
+        feedback.style.border = '1px solid #bbf7d0';
+        feedback.style.color = '#15803d';
+        feedback.innerHTML = '<i class="fa-solid fa-circle-check" style="font-size: 1.15rem;"></i> <div><strong>連線成功：</strong>' + data.message + '</div>';
+      } else {
+        feedback.style.background = '#fef2f2';
+        feedback.style.border = '1px solid #fecaca';
+        feedback.style.color = '#b91c1c';
+        feedback.innerHTML = '<i class="fa-solid fa-circle-xmark" style="font-size: 1.15rem;"></i> <div><strong>連線失敗：</strong>' + data.message + '</div>';
+      }
+    })
+    .catch(err => {
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
+      feedback.style.display = 'flex';
+      feedback.style.alignItems = 'center';
+      feedback.style.gap = '0.6rem';
+      feedback.style.background = '#fef2f2';
+      feedback.style.border = '1px solid #fecaca';
+      feedback.style.color = '#b91c1c';
+      feedback.innerHTML = '<i class="fa-solid fa-triangle-exclamation" style="font-size: 1.15rem;"></i> <div><strong>測試發生異常：</strong>' + err + '</div>';
+    });
+  }
+</script>
+{% endblock %}

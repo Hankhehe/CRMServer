@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% load crm_tags %}
+
+{% block title %}LDAP / AD 整合設定 - CRM Server{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 1.5rem;">
+  <h1 style="font-size: 1.75rem; font-weight: 700; margin-bottom: 0.25rem;">LDAP / AD 整合與群組權限</h1>
+  <p style="color: var(--text-muted); font-size: 0.95rem;">設定 Active Directory 連線伺服器與各安全群組之模組權限映射</p>
+</div>
+
+<div style="display: grid; grid-template-columns: 360px 1fr; gap: 1.5rem; align-items: flex-start;">
+  <!-- Left Column: Forms -->
+  <div>
+    <!-- AD Connection Settings -->
+    <div class="card">
+      <h3 style="font-size: 1.1rem; margin-bottom: 1rem;"><i class="fa-solid fa-server"></i> AD 伺服器連線</h3>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="save_settings">
+        <div class="form-group">
+          <label>AD 伺服器 URI</label>
+          {{ settings_form.ad_ip }}
+        </div>
+        <div class="form-group">
+          <label>Base DN</label>
+          {{ settings_form.ldap_base_dn }}
+        </div>
+        <div class="form-group">
+          <label>Bind DN (管理帳號)</label>
+          {{ settings_form.ldap_bind_dn }}
+        </div>
+        <div class="form-group">
+          <label>AD 密碼</label>
+          {{ settings_form.ldap_bind_password }}
+        </div>
+        <button type="submit" class="btn btn-primary" style="width: 100%;">
+          <i class="fa-solid fa-floppy-disk"></i> 儲存 AD 連線設定
+        </button>
+      </form>
+    </div>
+
+    <!-- Group Role Mapping Form -->
+    <div class="card">
+      <h3 style="font-size: 1.1rem; margin-bottom: 1rem;"><i class="fa-solid fa-shield-halved"></i> 指派 AD 群組權限</h3>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add_permission">
+        <div class="form-group">
+          <label>AD 安全群組</label>
+          {{ form.ou_path }}
+        </div>
+        <div class="form-group">
+          <label>指派模組權限角色</label>
+          {{ form.role }}
+        </div>
+        <div class="form-group">
+          <label>備註說明</label>
+          {{ form.note }}
+        </div>
+        <button type="submit" class="btn btn-primary" style="width: 100%;">
+          <i class="fa-solid fa-plus"></i> 新增/更新群組權限
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Right Column: Mapped Groups Table -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">
+        <i class="fa-solid fa-list-check"></i> 目前套用之 AD 群組權限
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th>AD 群組名稱</th>
+            <th>系統權限角色</th>
+            <th>備註</th>
+            <th>最後更新</th>
+            <th style="text-align: right;">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for perm in permissions %}
+            <tr>
+              <td><strong>{{ perm.ou_path }}</strong></td>
+              <td>
+                <span class="role-badge">{{ perm.get_role_display }}</span>
+              </td>
+              <td>{{ perm.note|default:"-" }}</td>
+              <td>{{ perm.updated_at|date:"Y-m-d H:i" }}</td>
+              <td style="text-align: right;">
+                <form method="post" action="{% url 'ou-permission-delete' perm.pk %}" style="display:inline;" onsubmit="return confirm('確定要移除此群組權限嗎？');">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-danger btn-sm"><i class="fa-solid fa-trash"></i></button>
+                </form>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="5" style="text-align: center; padding: 2rem; color: var(--text-muted);">
+                尚未設定任何 AD 群組權限
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

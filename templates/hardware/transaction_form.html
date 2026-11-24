@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}建立庫存異動交易 - CRM Server{% endblock %}
+
+{% block content %}
+<div style="max-width: 750px; margin: 0 auto;">
+  <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+    <a href="{% if next %}{{ next }}{% else %}{% url 'hardware-transactions' %}{% endif %}" class="btn btn-outline btn-sm">
+      <i class="fa-solid fa-arrow-left"></i> 返回
+    </a>
+    <h1 style="font-size: 1.5rem; font-weight: 700;">建立庫存異動交易</h1>
+  </div>
+
+  <div class="card">
+    <form method="post" id="txn-form">
+      {% csrf_token %}
+      {% if next %}
+        <input type="hidden" name="next" value="{{ next }}">
+      {% endif %}
+
+      {% if form.non_field_errors %}
+        <div class="alert alert-error">
+          {{ form.non_field_errors.0 }}
+        </div>
+      {% endif %}
+
+      <div class="form-group">
+        <label>交易類型 <span style="color: #ef4444;">*</span></label>
+        {{ form.type }}
+        {% if form.type.errors %}<div style="color: #ef4444; font-size: 0.8rem;">{{ form.type.errors.0 }}</div>{% endif %}
+      </div>
+
+      <!-- IN Fields -->
+      <div id="section-in" style="display: none; background: rgba(16, 185, 129, 0.05); padding: 1.25rem; border-radius: 10px; margin-bottom: 1.25rem; border: 1px solid rgba(16, 185, 129, 0.2);">
+        <h4 style="color: #059669; font-size: 0.95rem; margin-bottom: 1rem;"><i class="fa-solid fa-box-archive"></i> 新設備進貨資訊</h4>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div class="form-group">
+            <label>新設備序號 <span style="color: #ef4444;">*</span></label>
+            {{ form.code }}
+            {% if form.code.errors %}<div style="color: #ef4444; font-size: 0.8rem;">{{ form.code.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label>規格型號 <span style="color: #ef4444;">*</span></label>
+            {{ form.model }}
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div class="form-group">
+            <label>進貨日期</label>
+            {{ form.acquired_at }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Customer & Device selector for OUT, LOAN, RETURN -->
+      <div id="section-customer-device">
+        <div class="form-group" id="group-customer">
+          <label id="label-customer">客戶 (代號/統編/名稱) <span style="color: #ef4444;">*</span></label>
+          {{ form.customer }}
+          {% if form.customer.errors %}<div style="color: #ef4444; font-size: 0.8rem;">{{ form.customer.errors.0 }}</div>{% endif %}
+          <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">支援以 [客戶代號] 或客戶名稱快速檢索。</div>
+        </div>
+
+        <div class="form-group" id="group-device">
+          <label>選擇設備 (序號) <span style="color: #ef4444;">*</span></label>
+          {{ form.device }}
+          {% if form.device.errors %}<div style="color: #ef4444; font-size: 0.8rem;">{{ form.device.errors.0 }}</div>{% endif %}
+          <div id="device-hint" style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;"></div>
+        </div>
+
+        <div class="form-group" id="group-return-date" style="display: none;">
+          <label>預計歸還日 <span style="color: #ef4444;">*</span></label>
+          {{ form.expected_return_at }}
+          {% if form.expected_return_at.errors %}<div style="color: #ef4444; font-size: 0.8rem;">{{ form.expected_return_at.errors.0 }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>交易備註說明</label>
+        {{ form.note }}
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--glass-border);">
+        <a href="{% if next %}{{ next }}{% else %}{% url 'hardware-transactions' %}{% endif %}" class="btn btn-outline">取消</a>
+        <button type="submit" class="btn btn-primary">
+          <i class="fa-solid fa-check"></i> 確認執行異動
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const typeSelect = document.getElementById('id_type');
+    const secIn = document.getElementById('section-in');
+    const groupCustomer = document.getElementById('group-customer');
+    const groupDevice = document.getElementById('group-device');
+    const groupReturnDate = document.getElementById('group-return-date');
+    const customerSelect = document.getElementById('id_customer');
+    const deviceSelect = document.getElementById('id_device');
+    const deviceHint = document.getElementById('device-hint');
+
+    function updateFormVisibility() {
+      const val = typeSelect.value;
+
+      if (val === 'IN') {
+        secIn.style.display = 'block';
+        groupCustomer.style.display = 'none';
+        groupDevice.style.display = 'none';
+        groupReturnDate.style.display = 'none';
+      } else if (val === 'SCRAP') {
+        secIn.style.display = 'none';
+        groupCustomer.style.display = 'none';
+        groupDevice.style.display = 'block';
+        groupReturnDate.style.display = 'none';
+        deviceHint.textContent = '請選擇要報廢的在庫設備';
+      } else if (val === 'LOAN') {
+        secIn.style.display = 'none';
+        groupCustomer.style.display = 'block';
+        groupDevice.style.display = 'block';
+        groupReturnDate.style.display = 'block';
+        deviceHint.textContent = '請選擇要借測給該客戶的在庫可用設備';
+      } else if (val === 'OUT') {
+        secIn.style.display = 'none';
+        groupCustomer.style.display = 'block';
+        groupDevice.style.display = 'block';
+        groupReturnDate.style.display = 'none';
+        deviceHint.textContent = '請選擇要出貨給該客戶的在庫可用設備';
+      } else if (val === 'RETURN_LOAN') {
+        secIn.style.display = 'none';
+        groupCustomer.style.display = 'block';
+        groupDevice.style.display = 'block';
+        groupReturnDate.style.display = 'none';
+        deviceHint.textContent = '選擇客戶後，將動態列出該客戶借測中設備';
+        fetchCustomerDevices('loaned');
+      } else if (val === 'RETURN_OUT') {
+        secIn.style.display = 'none';
+        groupCustomer.style.display = 'block';
+        groupDevice.style.display = 'block';
+        groupReturnDate.style.display = 'none';
+        deviceHint.textContent = '選擇客戶後，將動態列出該客戶已出貨設備';
+        fetchCustomerDevices('shipped');
+      }
+    }
+
+    function fetchCustomerDevices(statusType) {
+      const custId = customerSelect.value;
+      if (!custId) return;
+      fetch(`/hardware/api/customers/${custId}/devices/?status=${statusType}`)
+        .then(res => res.json())
+        .then(data => {
+          const list = data.devices || data.probes || [];
+          if (list.length > 0) {
+            deviceSelect.innerHTML = '<option value="">-- 請選擇設備 --</option>';
+            list.forEach(p => {
+              const opt = document.createElement('option');
+              opt.value = p.id;
+              opt.textContent = `${p.code} (${p.model})`;
+              deviceSelect.appendChild(opt);
+            });
+            deviceHint.textContent = `找到 ${list.length} 台可辦理之設備`;
+          } else {
+            deviceHint.textContent = `此客戶目前查無此狀態之設備`;
+          }
+        })
+        .catch(err => console.error(err));
+    }
+
+    typeSelect.addEventListener('change', updateFormVisibility);
+    customerSelect.addEventListener('change', function() {
+      const val = typeSelect.value;
+      if (val === 'RETURN_LOAN') fetchCustomerDevices('loaned');
+      else if (val === 'RETURN_OUT') fetchCustomerDevices('shipped');
+    });
+
+    updateFormVisibility();
+  });
+</script>
+{% endblock %}

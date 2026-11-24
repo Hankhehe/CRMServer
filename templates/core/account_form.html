@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - CRM Server{% endblock %}
+
+{% block content %}
+<div style="max-width: 680px; margin: 0 auto; padding-bottom: 3rem;">
+  <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem;">
+    <div style="display: flex; align-items: center; gap: 1rem;">
+      <a href="{% url 'account-list' %}" class="btn btn-outline btn-sm"><i class="fa-solid fa-arrow-left"></i> 返回帳號列表</a>
+      <h1 style="font-size: 1.5rem; font-weight: 700; margin: 0;">{{ title }}</h1>
+    </div>
+  </div>
+
+  <form method="post">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+      <div class="card" style="border-left: 4px solid #ef4444; background: rgba(239, 68, 68, 0.08); margin-bottom: 1.5rem; padding: 1rem;">
+        {% for err in form.non_field_errors %}
+          <div style="color: #ef4444; font-size: 0.9rem;"><i class="fa-solid fa-circle-exclamation"></i> {{ err }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <!-- 區塊一：基本帳號資料 -->
+    <div class="card" style="margin-bottom: 1.5rem;">
+      <div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; border-bottom: 1px solid var(--glass-border); padding-bottom: 0.5rem;">
+        <i class="fa-solid fa-user-circle" style="color: var(--primary);"></i> 基本帳號資訊
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem;">
+        {% if form.username %}
+          <div class="form-group">
+            <label>{{ form.username.label }} <span style="color:#ef4444;">*</span></label>
+            {{ form.username }}
+            {% if form.username.help_text %}<div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">{{ form.username.help_text }}</div>{% endif %}
+            {% if form.username.errors %}<div style="color: #ef4444; font-size: 0.8rem; margin-top: 0.25rem;">{{ form.username.errors.0 }}</div>{% endif %}
+          </div>
+        {% endif %}
+
+        {% if form.password1 %}
+          <div class="form-group">
+            <label>{{ form.password1.label }} <span style="color:#ef4444;">*</span></label>
+            {{ form.password1 }}
+            {% if form.password1.errors %}<div style="color: #ef4444; font-size: 0.8rem; margin-top: 0.25rem;">{{ form.password1.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label>{{ form.password2.label }} <span style="color:#ef4444;">*</span></label>
+            {{ form.password2 }}
+            {% if form.password2.errors %}<div style="color: #ef4444; font-size: 0.8rem; margin-top: 0.25rem;">{{ form.password2.errors.0 }}</div>{% endif %}
+          </div>
+        {% endif %}
+
+        <div class="form-group">
+          <label>{{ form.last_name.label }}</label>
+          {{ form.last_name }}
+          {% if form.last_name.errors %}<div style="color: #ef4444; font-size: 0.8rem; margin-top: 0.25rem;">{{ form.last_name.errors.0 }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label>{{ form.first_name.label }}</label>
+          {{ form.first_name }}
+          {% if form.first_name.errors %}<div style="color: #ef4444; font-size: 0.8rem; margin-top: 0.25rem;">{{ form.first_name.errors.0 }}</div>{% endif %}
+        </div>
+
+        <div class="form-group" style="grid-column: 1 / -1;">
+          <label>{{ form.email.label }}</label>
+          {{ form.email }}
+          {% if form.email.errors %}<div style="color: #ef4444; font-size: 0.8rem; margin-top: 0.25rem;">{{ form.email.errors.0 }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 1.5rem; margin-top: 1rem; padding-top: 0.75rem; border-top: 1px dashed var(--glass-border); flex-wrap: wrap;">
+        {% if form.is_active %}
+          <div style="display: flex; align-items: center;">
+            {{ form.is_active }}
+            <label for="id_is_active" style="margin: 0; cursor: pointer; font-weight: 500;">啟用此帳號</label>
+          </div>
+        {% endif %}
+        {% if form.is_superuser %}
+          <div style="display: flex; align-items: center;">
+            {{ form.is_superuser }}
+            <label for="id_is_superuser" style="margin: 0; cursor: pointer; font-weight: 500; color: #f59e0b;">
+              <i class="fa-solid fa-shield-halved"></i> 系統超級管理員 (Superuser - 擁有資料庫備份與切換最高權限)
+            </label>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- 區塊二：指派系統角色 -->
+    <div class="card" style="margin-bottom: 2rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; border-bottom: 1px solid var(--glass-border); padding-bottom: 0.5rem;">
+        <div style="font-size: 1.1rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem;">
+          <i class="fa-solid fa-id-badge" style="color: var(--primary);"></i> 指派系統角色 (Role)
+        </div>
+        <a href="{% url 'account-list' %}?tab=roles" target="_blank" class="btn btn-outline btn-sm" style="font-size: 0.75rem;">
+          <i class="fa-solid fa-arrow-up-right-from-square"></i> 管理/建立新角色
+        </a>
+      </div>
+
+      <div class="form-group" style="margin-bottom: 0.5rem;">
+        <label for="id_role_obj" style="font-weight: 500;">選擇套用之系統角色：</label>
+        {{ form.role_obj }}
+        {% if form.role_obj.errors %}<div style="color: #ef4444; font-size: 0.8rem; margin-top: 0.25rem;">{{ form.role_obj.errors.0 }}</div>{% endif %}
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.5rem;">
+          💡 <strong>角色繼承說明</strong>：此帳號將自動繼承所選角色的五大模組功能權限與客戶資料視野；您亦可於下方針對此帳號單獨勾選簽核覆核權限。
+        </div>
+      </div>
+    </div>
+
+    <!-- 區塊三：簽核覆核權限設定 -->
+    <div class="card" style="margin-bottom: 2rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; border-bottom: 1px solid var(--glass-border); padding-bottom: 0.5rem;">
+        <div style="font-size: 1.1rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem;">
+          <i class="fa-solid fa-stamp" style="color: var(--primary);"></i> 單據簽核覆核權限 (Approval Permissions)
+        </div>
+        <a href="{% url 'account-list' %}?tab=approval" target="_blank" class="btn btn-outline btn-sm" style="font-size: 0.75rem;">
+          <i class="fa-solid fa-sliders"></i> 全域簽核開關設定
+        </a>
+      </div>
+      <p style="font-size: 0.825rem; color: var(--text-muted); margin-bottom: 0.85rem;">
+        勾選後，此帳號可覆核其他同仁開立之待審單據；且此帳號自己開立該類單據時將直接核准生效（超級管理員預設擁有全部覆核權限）：
+      </p>
+      <div style="display: flex; flex-direction: column; gap: 0.65rem;">
+        <label style="display: flex; align-items: center; cursor: pointer; margin: 0; font-weight: 500;">
+          {{ form.can_approve_licenses }}
+          <span>{{ form.can_approve_licenses.label }}</span>
+        </label>
+        <label style="display: flex; align-items: center; cursor: pointer; margin: 0; font-weight: 500;">
+          {{ form.can_approve_contracts }}
+          <span>{{ form.can_approve_contracts.label }}</span>
+        </label>
+        <label style="display: flex; align-items: center; cursor: pointer; margin: 0; font-weight: 500;">
+          {{ form.can_approve_hardware }}
+          <span>{{ form.can_approve_hardware.label }}</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- 底部操作按鈕 -->
+    <div style="display: flex; justify-content: flex-end; gap: 1rem; padding-top: 1rem; border-top: 1px solid var(--glass-border);">
+      <a href="{% url 'account-list' %}" class="btn btn-outline">取消返回</a>
+      <button type="submit" class="btn btn-primary" style="padding: 0.65rem 1.75rem; font-weight: 600;">
+        <i class="fa-solid fa-floppy-disk"></i> 儲存帳號設定
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}

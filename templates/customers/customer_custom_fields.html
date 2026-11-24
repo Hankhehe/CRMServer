@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - CRM Server{% endblock %}
+
+{% block content %}
+<div style="max-width: 980px; margin: 0 auto;">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+    <div style="display: flex; align-items: center; gap: 1rem;">
+      <a href="{% url 'customer-list' %}" class="btn btn-outline btn-sm">
+        <i class="fa-solid fa-arrow-left"></i> 返回客戶名冊
+      </a>
+      <div>
+        <h1 style="font-size: 1.55rem; font-weight: 700; margin-bottom: 0.15rem;">{{ title }}</h1>
+        <p style="color: var(--text-muted); font-size: 0.9rem;">設定適用於全系統所有客戶的自訂擴充欄位（支援字串、數字、日期時間、布林、下拉選單與複選清單）</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <form method="post">
+      {% csrf_token %}
+
+      <div style="background: rgba(79, 70, 229, 0.06); border-left: 3px solid var(--primary); padding: 0.75rem 1rem; border-radius: 6px; font-size: 0.85rem; color: var(--text-main); margin-bottom: 1.25rem; line-height: 1.6;">
+        <div style="font-weight: 700; color: var(--primary); margin-bottom: 0.25rem;">
+          <i class="fa-solid fa-circle-info"></i> 全域客戶自訂欄位說明
+        </div>
+        <ul style="margin: 0; padding-left: 1.2rem; color: var(--text-muted);">
+          <li>此處設定的欄位將<strong>套用至全公司所有客戶</strong>（包含新增/編輯客戶表單、客戶詳情頁基本資料卡片、以及 Excel 匯出入與範本）。</li>
+          <li>勾選「<strong>列表顯示</strong>」的欄位，將會顯示於「客戶名冊」列表頁的「自訂欄位」欄中；若該欄位型態為「下拉選單 / 複選清單 / 布林」，還會在客戶名冊搜尋列自動產生對應的下拉篩選器。</li>
+          <li>若設定「<strong>預設值</strong>」，在新增客戶時表單將自動帶入該預設值（非必填欄位仍可自由清空）。</li>
+        </ul>
+      </div>
+
+      <!-- 自訂欄位 UI 編輯器 -->
+      {% include "components/custom_field_builder.html" %}
+
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--glass-border);">
+        <a href="{% url 'customer-list' %}" class="btn btn-outline">取消</a>
+        <button type="submit" class="btn btn-primary">
+          <i class="fa-solid fa-floppy-disk"></i> 儲存全域客戶自訂欄位
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

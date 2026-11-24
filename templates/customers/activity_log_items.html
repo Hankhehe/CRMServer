@@ -1,0 +1,102 @@
+{% for log in activity_logs %}
+  <div id="activity-log-{{ log.pk }}"
+       class="activity-timeline-item"
+       data-type="{{ log.activity_type }}"
+       data-author="{{ log.created_by.username|default:'' }}"
+       data-date="{{ log.created_at|date:'Y-m-d' }}"
+       data-search="{{ log.content|lower }} {{ log.contact.name|default:''|lower }} {{ log.created_by.get_full_name|default:log.created_by.username|default:''|lower }}"
+       style="position: relative; margin-bottom: 1.75rem;">
+    <!-- Timeline Bullet Icon -->
+    <div style="position: absolute; left: -2.35rem; top: 0.75rem; width: 32px; height: 32px; border-radius: 50%; background: white; border: 2px solid var(--primary); display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.06); z-index: 2;">
+      <i class="{{ log.icon_class }}" style="font-size: 0.8rem; color: var(--primary);"></i>
+    </div>
+
+    <!-- Activity Card -->
+    <div style="background: white; border-radius: 12px; border: 1px solid var(--glass-border); padding: 1.25rem; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04); transition: transform 0.15s, box-shadow 0.15s;">
+      <!-- Header Row -->
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem; padding-bottom: 0.6rem; border-bottom: 1px solid #f1f5f9;">
+        <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+          <span style="font-weight: 700; color: var(--text-main); display: inline-flex; align-items: center; gap: 0.35rem;">
+            <i class="fa-regular fa-circle-user" style="color: var(--primary); font-size: 1.05rem;"></i>
+            {{ log.created_by.get_full_name|default:log.created_by.username|default:"同仁" }}
+          </span>
+          <span style="font-size: 0.8rem; color: var(--text-muted);" title="{{ log.created_at|date:'Y-m-d H:i:s' }}">
+            <i class="fa-regular fa-clock"></i> {{ log.created_at|date:"Y-m-d H:i" }}
+          </span>
+          {% if log.is_edited %}
+            <span style="font-size: 0.75rem; color: var(--text-muted); background: #f1f5f9; padding: 2px 6px; border-radius: 4px;" title="最後修改: {{ log.updated_at|date:'Y-m-d H:i' }}">
+              <i class="fa-solid fa-pen-nib" style="font-size: 0.65rem;"></i> 已編輯
+            </span>
+          {% endif %}
+        </div>
+
+        <!-- Badges and Actions -->
+        <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
+          <span class="badge {{ log.badge_class }}">
+            <i class="{{ log.icon_class }}"></i> {{ log.get_activity_type_display }}
+          </span>
+          {% if log.contact %}
+            <span class="badge badge-secondary" title="關聯窗口">
+              <i class="fa-solid fa-user-tie"></i> {{ log.contact.name }}{% if log.contact.title %} ({{ log.contact.title }}){% endif %}
+            </span>
+          {% endif %}
+          {% if log.follow_up_date %}
+            <span class="badge badge-loaned" title="預計跟進日期">
+              <i class="fa-solid fa-calendar-check"></i> 跟進: {{ log.follow_up_date|date:"Y-m-d" }}
+            </span>
+          {% endif %}
+
+          {% if log.created_by == request.user or can_edit_crm %}
+            <div style="display: inline-flex; gap: 0.25rem; margin-left: 0.5rem;">
+              <button type="button" class="btn btn-outline btn-sm" style="padding: 0.2rem 0.5rem; font-size: 0.75rem;" title="編輯紀錄"
+                      onclick="openEditLogModal('{{ log.pk }}', '{{ log.activity_type }}', '{{ log.contact.pk|default:'' }}', '{{ log.follow_up_date|date:'Y-m-d'|default:'' }}', '{{ log.content|escapejs }}')">
+                <i class="fa-solid fa-pencil"></i>
+              </button>
+              <form method="post" action="{% url 'activity-delete' log.pk %}" style="display: inline;" onsubmit="return confirm('確定要刪除這筆執行軌跡紀錄嗎？包含之附件亦會一併移除。');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline btn-sm" style="padding: 0.2rem 0.5rem; font-size: 0.75rem; color: #ef4444;" title="刪除紀錄">
+                  <i class="fa-solid fa-trash"></i>
+                </button>
+              </form>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Content Body -->
+      <div style="font-size: 0.925rem; line-height: 1.65; color: var(--text-main); white-space: pre-wrap; word-break: break-word; margin-bottom: 0.75rem;">{{ log.content }}</div>
+
+      <!-- Attachments List -->
+      {% if log.attachments.all %}
+        <div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px dashed #e2e8f0;">
+          <div style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.4rem;">
+            <i class="fa-solid fa-paperclip"></i> 附件檔案 ({{ log.attachments.count }} 個)
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+            {% for att in log.attachments.all %}
+              <div style="display: inline-flex; align-items: center; gap: 0.5rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.35rem 0.75rem; font-size: 0.825rem;">
+                <a href="{{ att.file.url }}" target="_blank" rel="noopener noreferrer" style="color: var(--primary); text-decoration: none; display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 500;">
+                  {% if att.is_image %}
+                    <i class="fa-regular fa-image" style="color: #059669;"></i>
+                  {% else %}
+                    <i class="fa-regular fa-file-lines" style="color: #4f46e5;"></i>
+                  {% endif %}
+                  <span>{{ att.filename }}</span>
+                  <span style="color: var(--text-muted); font-size: 0.75rem;">({{ att.formatted_size }})</span>
+                </a>
+                {% if log.created_by == request.user or can_edit_crm %}
+                  <form method="post" action="{% url 'activity-attachment-delete' att.pk %}" style="display: inline; margin-left: 0.25rem;" onsubmit="return confirm('確定要刪除附件「{{ att.filename|escapejs }}」嗎？');">
+                    {% csrf_token %}
+                    <button type="submit" style="background: none; border: none; color: #94a3b8; cursor: pointer; padding: 0;" title="刪除此附件">
+                      <i class="fa-solid fa-xmark" style="font-size: 0.85rem;"></i>
+                    </button>
+                  </form>
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+{% endfor %}

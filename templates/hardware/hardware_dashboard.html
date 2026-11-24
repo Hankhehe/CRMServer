@@ -1,0 +1,400 @@
+{% extends "base.html" %}
+
+{% block title %}硬體設備與資產儀表板 - CRM Server{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.75rem; flex-wrap: wrap; gap: 1rem;">
+  <div>
+    <h1 style="font-size: 1.75rem; font-weight: 700; margin-bottom: 0.25rem;">
+      <i class="fa-solid fa-server" style="color: var(--primary); margin-right: 0.5rem;"></i>硬體設備與資產儀表板
+    </h1>
+    <p style="color: var(--text-muted); font-size: 0.95rem;">即時掌握各型號硬體庫存水位、借測設備流向與客戶催還追蹤</p>
+  </div>
+  <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+    <a href="{% url 'hardware-list' %}" class="btn btn-outline">
+      <i class="fa-solid fa-boxes-stacked"></i> 設備庫存列表
+    </a>
+    <a href="{% url 'hardware-models' %}" class="btn btn-outline">
+      <i class="fa-solid fa-microchip"></i> 規格主檔
+    </a>
+    {% if can_edit_hardware or can_edit_probe %}
+      <a href="{% url 'hardware-transactions' %}" class="btn btn-primary">
+        <i class="fa-solid fa-right-left"></i> 執行庫存異動
+      </a>
+    {% endif %}
+  </div>
+</div>
+
+<!-- KPI Cards Grid -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1.25rem; margin-bottom: 1.75rem;">
+  <!-- Available Stock -->
+  <div class="card" style="margin-bottom: 0;">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+      <div>
+        <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.25rem;">在庫可用設備</div>
+        <div style="font-size: 2.1rem; font-weight: 700; color: #059669;">{{ probe_counts.available|default:0 }}</div>
+      </div>
+      <div style="width: 48px; height: 48px; border-radius: 12px; background: rgba(16, 185, 129, 0.12); color: #059669; display: flex; align-items: center; justify-content: center; font-size: 1.35rem;">
+        <i class="fa-solid fa-box-open"></i>
+      </div>
+    </div>
+    <div style="margin-top: 0.75rem; font-size: 0.8rem;">
+      <a href="{% url 'hardware-list' %}?status=available" style="color: #059669; text-decoration: none; font-weight: 600;">
+        查看在庫設備清單 <i class="fa-solid fa-arrow-right" style="font-size: 0.75rem;"></i>
+      </a>
+    </div>
+  </div>
+
+  <!-- Loaned Stock -->
+  <div class="card" style="margin-bottom: 0;">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+      <div>
+        <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.25rem;">借測中設備</div>
+        <div style="font-size: 2.1rem; font-weight: 700; color: #d97706;">{{ probe_counts.loaned|default:0 }}</div>
+      </div>
+      <div style="width: 48px; height: 48px; border-radius: 12px; background: rgba(245, 158, 11, 0.12); color: #d97706; display: flex; align-items: center; justify-content: center; font-size: 1.35rem;">
+        <i class="fa-solid fa-hand-holding-hand"></i>
+      </div>
+    </div>
+    <div style="margin-top: 0.75rem; font-size: 0.8rem;">
+      <a href="#loan-tracking-section" style="color: #d97706; text-decoration: none; font-weight: 600;">
+        瀏覽下方借測明細 <i class="fa-solid fa-arrow-down" style="font-size: 0.75rem;"></i>
+      </a>
+    </div>
+  </div>
+
+  <!-- Overdue Loans Warning -->
+  <div class="card" style="margin-bottom: 0; {% if overdue_loan_count > 0 %}border-color: rgba(239, 68, 68, 0.35); background: linear-gradient(to bottom, #ffffff, #fef2f2);{% endif %}">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+      <div>
+        <div style="font-size: 0.85rem; font-weight: 600; color: {% if overdue_loan_count > 0 %}#dc2626{% else %}var(--text-muted){% endif %}; margin-bottom: 0.25rem;">
+          借測已逾期設備
+        </div>
+        <div style="font-size: 2.1rem; font-weight: 700; color: {% if overdue_loan_count > 0 %}#dc2626{% else %}var(--text-muted){% endif %};">
+          {{ overdue_loan_count }}
+        </div>
+      </div>
+      <div style="width: 48px; height: 48px; border-radius: 12px; background: rgba(239, 68, 68, 0.12); color: #dc2626; display: flex; align-items: center; justify-content: center; font-size: 1.35rem;">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+      </div>
+    </div>
+    <div style="margin-top: 0.75rem; font-size: 0.8rem;">
+      {% if overdue_loan_count > 0 %}
+        <a href="?overdue=1#loan-tracking-section" style="color: #dc2626; text-decoration: none; font-weight: 600;">
+          立即催還 {{ overdue_loan_count }} 台逾期設備 <i class="fa-solid fa-arrow-right" style="font-size: 0.75rem;"></i>
+        </a>
+      {% else %}
+        <span style="color: #059669; font-weight: 500;"><i class="fa-solid fa-check"></i> 目前無逾期借測</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Shipped Stock -->
+  <div class="card" style="margin-bottom: 0;">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+      <div>
+        <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.25rem;">正式出貨設備</div>
+        <div style="font-size: 2.1rem; font-weight: 700; color: #2563eb;">{{ probe_counts.shipped|default:0 }}</div>
+      </div>
+      <div style="width: 48px; height: 48px; border-radius: 12px; background: rgba(37, 99, 235, 0.12); color: #2563eb; display: flex; align-items: center; justify-content: center; font-size: 1.35rem;">
+        <i class="fa-solid fa-truck"></i>
+      </div>
+    </div>
+    <div style="margin-top: 0.75rem; font-size: 0.8rem;">
+      <a href="{% url 'hardware-list' %}?status=shipped" style="color: #2563eb; text-decoration: none; font-weight: 600;">
+        查看出貨客戶分佈 <i class="fa-solid fa-arrow-right" style="font-size: 0.75rem;"></i>
+      </a>
+    </div>
+  </div>
+
+  <!-- Total Probes -->
+  <div class="card" style="margin-bottom: 0;">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+      <div>
+        <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.25rem;">總設備資產量</div>
+        <div style="font-size: 2.1rem; font-weight: 700; color: var(--primary);">{{ probe_counts.total|default:0 }}</div>
+      </div>
+      <div style="width: 48px; height: 48px; border-radius: 12px; background: rgba(79, 70, 229, 0.12); color: var(--primary); display: flex; align-items: center; justify-content: center; font-size: 1.35rem;">
+        <i class="fa-solid fa-cubes-stacked"></i>
+      </div>
+    </div>
+    <div style="margin-top: 0.75rem; font-size: 0.8rem; color: var(--text-muted);">
+      含報廢: {{ probe_counts.scrapped|default:0 }} 台
+    </div>
+  </div>
+</div>
+
+<!-- Section 1: Model Inventory Summary Table -->
+<div class="card" style="margin-bottom: 2rem;">
+  <div class="card-header" style="flex-wrap: wrap; gap: 0.75rem;">
+    <div class="card-title">
+      <i class="fa-solid fa-layer-group" style="color: var(--primary);"></i> 各規格型號庫存概況彙總
+      <span style="font-size: 0.85rem; font-weight: 400; color: var(--text-muted); margin-left: 0.5rem;">
+        （點擊庫存數字可直接跳轉至篩選後的設備清單）
+      </span>
+    </div>
+    <div>
+      <a href="{% url 'hardware-models' %}" class="btn btn-outline btn-sm">
+        <i class="fa-solid fa-list-check"></i> 管理規格主檔
+      </a>
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th>型號代碼</th>
+          <th>型號名稱</th>
+          <th>連接埠數</th>
+          <th>硬體規格 (CPU / RAM / HDD)</th>
+          <th>原廠 / 供應商</th>
+          <th style="text-align: center;">在庫可用</th>
+          <th style="text-align: center;">客戶借測</th>
+          <th style="text-align: center;">正式出貨</th>
+          <th style="text-align: center;">報廢</th>
+          <th style="text-align: center;">總台數</th>
+          <th style="text-align: right;">操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in models_summary %}
+          <tr>
+            <td><strong style="font-family: monospace;">{{ m.model_code }}</strong></td>
+            <td>
+              <a href="{% url 'hardware-list' %}?model={{ m.pk }}" style="font-weight: 600; color: var(--text-main); text-decoration: none;">
+                {{ m.name }}
+              </a>
+            </td>
+            <td>{{ m.port_count }} Ports</td>
+            <td style="font-size: 0.85rem; color: var(--text-muted);">
+              {% if m.cpu or m.memory or m.hdd %}
+                {{ m.cpu|default:"-" }} / {{ m.memory|default:"-" }} / {{ m.hdd|default:"-" }}
+              {% else %}
+                -
+              {% endif %}
+            </td>
+            <td>{{ m.supplier.name|default:"-" }}</td>
+            <td style="text-align: center;">
+              <a href="{% url 'hardware-list' %}?model={{ m.pk }}&status=available" title="點擊查看此型號在庫可用設備" style="text-decoration: none;">
+                <span class="badge badge-available" style="cursor: pointer; font-size: 0.85rem; padding: 0.3rem 0.75rem;">
+                  {{ m.count_available }}
+                </span>
+              </a>
+            </td>
+            <td style="text-align: center;">
+              <a href="{% url 'hardware-list' %}?model={{ m.pk }}&status=loaned" title="點擊查看此型號借測中設備" style="text-decoration: none;">
+                <span class="badge badge-loaned" style="cursor: pointer; font-size: 0.85rem; padding: 0.3rem 0.75rem;">
+                  {{ m.count_loaned }}
+                </span>
+              </a>
+            </td>
+            <td style="text-align: center;">
+              <a href="{% url 'hardware-list' %}?model={{ m.pk }}&status=shipped" title="點擊查看此型號已出貨設備" style="text-decoration: none;">
+                <span class="badge badge-shipped" style="cursor: pointer; font-size: 0.85rem; padding: 0.3rem 0.75rem;">
+                  {{ m.count_shipped }}
+                </span>
+              </a>
+            </td>
+            <td style="text-align: center;">
+              <a href="{% url 'hardware-list' %}?model={{ m.pk }}&status=scrapped" title="點擊查看此型號已報廢設備" style="text-decoration: none;">
+                <span class="badge badge-secondary" style="cursor: pointer; font-size: 0.85rem; padding: 0.3rem 0.75rem;">
+                  {{ m.count_scrapped }}
+                </span>
+              </a>
+            </td>
+            <td style="text-align: center;">
+              <a href="{% url 'hardware-list' %}?model={{ m.pk }}" title="點擊查看此型號全部設備" style="text-decoration: none;">
+                <strong style="color: var(--primary); font-size: 1rem;">{{ m.count_total }}</strong>
+              </a>
+            </td>
+            <td style="text-align: right;">
+              <a href="{% url 'hardware-list' %}?model={{ m.pk }}" class="btn btn-outline btn-sm">
+                <i class="fa-solid fa-eye"></i> 清單
+              </a>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="11" style="text-align: center; padding: 3rem; color: var(--text-muted);">
+              尚無型號規格主檔資料
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Section 2: Loaned Probes Tracking Table -->
+<div class="card" id="loan-tracking-section">
+  <div class="card-header" style="flex-wrap: wrap; gap: 0.75rem;">
+    <div>
+      <div class="card-title">
+        <i class="fa-solid fa-clock-rotate-left" style="color: #d97706;"></i> 客戶借測中設備追蹤清單
+        {% if loaned_probes %}
+          <span class="badge badge-loaned" style="margin-left: 0.5rem;">共 {{ loaned_probes|length }} 台</span>
+        {% endif %}
+      </div>
+      <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.2rem;">
+        掌握目前在各客戶端進行測試之設備序號、到期日與逾期狀況，便於同仁追蹤取回
+      </div>
+    </div>
+    
+    <!-- Search and Overdue Filter Form -->
+    <form method="get" action="#loan-tracking-section" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+      <div style="position: relative;">
+        <input 
+          type="text" 
+          name="q_loan" 
+          value="{{ loan_search }}" 
+          placeholder="搜尋客戶、序號或型號..." 
+          style="padding: 0.45rem 0.85rem; padding-left: 2rem; border-radius: 8px; border: 1px solid var(--glass-border); font-size: 0.875rem; background: #fff;"
+        >
+        <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 0.8rem;"></i>
+      </div>
+
+      {% if filter_overdue == '1' %}
+        <input type="hidden" name="overdue" value="1">
+        <a href="?{% if loan_search %}q_loan={{ loan_search }}{% endif %}#loan-tracking-section" class="btn btn-sm btn-primary">
+          <i class="fa-solid fa-filter-circle-xmark"></i> 顯示全部借測
+        </a>
+      {% else %}
+        <a href="?overdue=1{% if loan_search %}&q_loan={{ loan_search }}{% endif %}#loan-tracking-section" class="btn btn-sm btn-outline" style="color: #dc2626; border-color: rgba(239, 68, 68, 0.4);">
+          <i class="fa-solid fa-triangle-exclamation"></i> 僅顯示已逾期 ({{ overdue_loan_count }})
+        </a>
+      {% endif %}
+
+      <button type="submit" class="btn btn-sm btn-outline">
+        <i class="fa-solid fa-search"></i> 查詢
+      </button>
+
+      {% if loan_search or filter_overdue %}
+        <a href="{% url 'hardware-dashboard' %}#loan-tracking-section" class="btn btn-sm btn-outline" title="清除篩選條件">
+          <i class="fa-solid fa-rotate-left"></i> 重設
+        </a>
+      {% endif %}
+    </form>
+  </div>
+
+  {% if loaned_probes %}
+    <div class="table-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th>設備序號 / 資產編號</th>
+            <th>設備型號</th>
+            <th>借測客戶名稱 (代號)</th>
+            <th>客戶聯絡方式</th>
+            <th>購入/進貨日</th>
+            <th>預計歸還日</th>
+            <th>歸還狀態與剩餘天數</th>
+            <th style="text-align: right;">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in loaned_probes %}
+            <tr {% if p.is_overdue %}style="background: rgba(254, 242, 242, 0.6);"{% endif %}>
+              <td>
+                <a href="{% url 'hardware-detail' p.pk %}" style="font-weight: 700; color: var(--primary); text-decoration: none; font-family: monospace;">
+                  {{ p.code }}
+                </a>
+              </td>
+              <td>
+                <strong>{{ p.model.name }}</strong>
+                <span style="font-size: 0.8rem; color: var(--text-muted); display: block;">{{ p.model.port_count }} Ports</span>
+              </td>
+              <td>
+                {% if p.customer %}
+                  {% if can_view_crm %}
+                    <a href="{% url 'customer-detail' p.customer.pk %}" style="font-weight: 600; color: var(--text-main); text-decoration: none;">
+                      {{ p.customer.name }}
+                    </a>
+                  {% else %}
+                    <span style="font-weight: 600; color: var(--text-main);">{{ p.customer.name }}</span>
+                  {% endif %}
+                  <span style="font-size: 0.8rem; color: var(--text-muted); display: block;">[{{ p.customer.code }}]</span>
+                {% else %}
+                  <span style="color: var(--text-muted);">（未關聯客戶）</span>
+                {% endif %}
+              </td>
+              <td style="font-size: 0.85rem;">
+                {% if p.customer %}
+                  {% if p.customer.contact %}
+                    <div><i class="fa-solid fa-user" style="color: var(--text-muted); width: 14px;"></i> {{ p.customer.contact }}</div>
+                  {% endif %}
+                  {% if p.customer.phone %}
+                    <div><i class="fa-solid fa-phone" style="color: var(--text-muted); width: 14px;"></i> {{ p.customer.phone }}</div>
+                  {% endif %}
+                  {% if not p.customer.contact and not p.customer.phone %}
+                    <span style="color: var(--text-muted);">-</span>
+                  {% endif %}
+                {% else %}
+                  <span style="color: var(--text-muted);">-</span>
+                {% endif %}
+              </td>
+              <td style="font-size: 0.85rem; color: var(--text-muted);">
+                {{ p.acquired_at|date:"Y-m-d"|default:"-" }}
+              </td>
+              <td>
+                {% if p.expected_return_at %}
+                  <strong style="font-family: monospace;">{{ p.expected_return_at|date:"Y-m-d" }}</strong>
+                {% else %}
+                  <span style="color: var(--text-muted);">未設定</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if p.expected_return_at %}
+                  {% if p.is_overdue %}
+                    <span class="badge badge-scrapped" style="font-weight: 700;">
+                      <i class="fa-solid fa-triangle-exclamation"></i> 已逾期 {{ p.abs_days_diff }} 天
+                    </span>
+                  {% elif p.days_diff == 0 %}
+                    <span class="badge badge-loaned" style="font-weight: 700;">
+                      <i class="fa-solid fa-bell"></i> 今日到期
+                    </span>
+                  {% elif p.days_diff <= 7 %}
+                    <span class="badge badge-loaned">
+                      <i class="fa-solid fa-clock"></i> 剩餘 {{ p.days_diff }} 天到期
+                    </span>
+                  {% else %}
+                    <span class="badge badge-available">
+                      <i class="fa-solid fa-circle-check"></i> 借測中 (剩 {{ p.days_diff }} 天)
+                    </span>
+                  {% endif %}
+                {% else %}
+                  <span class="badge badge-secondary">未設定歸還日</span>
+                {% endif %}
+              </td>
+              <td style="text-align: right;">
+                <div style="display: flex; gap: 0.4rem; justify-content: flex-end;">
+                  <a href="{% url 'hardware-detail' p.pk %}" class="btn btn-outline btn-sm" title="查看設備明細">
+                    <i class="fa-solid fa-circle-info"></i> 明細
+                  </a>
+                  {% if can_edit_probe %}
+                    <a href="{% url 'hardware-update' p.pk %}" class="btn btn-outline btn-sm" title="編輯設備/歸還">
+                      <i class="fa-solid fa-pen-to-square"></i> 編輯
+                    </a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div style="padding: 3rem; text-align: center; color: var(--text-muted);">
+      <i class="fa-solid fa-circle-check" style="font-size: 2.2rem; color: #10b981; margin-bottom: 0.75rem; display: block;"></i>
+      {% if filter_overdue == '1' %}
+        太棒了！目前沒有任何逾期的借測設備。
+      {% elif loan_search %}
+        找不到符合「{{ loan_search }}」的借測設備記錄。
+      {% else %}
+        目前沒有任何借測中的設備。
+      {% endif %}
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

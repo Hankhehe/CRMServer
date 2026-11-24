@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}軟體產品主檔 - CRM Server{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+  <div>
+    <h1 style="font-size: 1.75rem; font-weight: 700; margin-bottom: 0.25rem;">軟體產品主檔</h1>
+    <p style="color: var(--text-muted); font-size: 0.95rem;">定義軟體產品規格與自訂動態擴充欄位 (JSON Schema)</p>
+  </div>
+  <div style="display: flex; gap: 0.5rem;">
+    {% if can_edit_products %}
+      <a href="{% url 'product-create' %}" class="btn btn-primary">
+        <i class="fa-solid fa-plus"></i> 新增產品主檔
+      </a>
+    {% endif %}
+    <a href="{% url 'license-list' %}" class="btn btn-outline">
+      <i class="fa-solid fa-certificate"></i> 客戶授權清單
+    </a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">
+      <i class="fa-solid fa-shapes"></i> 產品目錄 (共 {{ products.count }} 項)
+    </div>
+  </div>
+  {% if products %}
+    <div class="table-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th>產品代碼</th>
+            <th>產品名稱</th>
+            <th>類別</th>
+            <th>預設計量單位</th>
+            <th>有效授權數</th>
+            <th>自訂欄位規格</th>
+            <th>狀態</th>
+            <th style="text-align: right;">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in products %}
+            <tr>
+              <td><code style="font-weight: 700; font-size: 0.95rem; color: var(--primary);">{{ p.code }}</code></td>
+              <td><strong>{{ p.name }}</strong></td>
+              <td>{{ p.category|default:"-" }}</td>
+              <td>{{ p.default_unit }}</td>
+              <td>
+                <span class="badge badge-available">{{ p.active_license_count }} 份</span>
+              </td>
+              <td>
+                {% if p.custom_field_schema %}
+                  <span class="badge badge-loaned" title="{{ p.custom_field_schema|length }} 個自訂擴充屬性">
+                    {{ p.custom_field_schema|length }} 個規格欄位
+                  </span>
+                {% else %}
+                  <span style="color: var(--text-muted); font-size: 0.8rem;">標準欄位</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if p.is_active %}
+                  <span class="badge badge-available">啟用</span>
+                {% else %}
+                  <span class="badge badge-secondary">停用</span>
+                {% endif %}
+              </td>
+              <td style="text-align: right; white-space: nowrap;">
+                {% if can_edit_products %}
+                  <a href="{% url 'product-update' p.pk %}" class="btn btn-outline btn-sm" title="編輯產品與規格">
+                    <i class="fa-solid fa-pen"></i> 編輯規格
+                  </a>
+                  <a href="{% url 'product-delete' p.pk %}" class="btn btn-danger btn-sm" title="刪除">
+                    <i class="fa-solid fa-trash"></i>
+                  </a>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div style="padding: 3rem; text-align: center; color: var(--text-muted);">
+      <i class="fa-solid fa-shapes" style="font-size: 2.5rem; opacity: 0.3; margin-bottom: 0.75rem;"></i>
+      <p>目前尚無軟體產品主檔</p>
+      {% if can_edit_products %}
+        <a href="{% url 'product-create' %}" class="btn btn-primary btn-sm" style="margin-top: 0.5rem;">
+          <i class="fa-solid fa-plus"></i> 建立第一款軟體產品
+        </a>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

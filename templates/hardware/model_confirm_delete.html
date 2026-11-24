@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}確認刪除規格型號 - CRM Server{% endblock %}
+
+{% block content %}
+<div style="max-width: 600px; margin: 2rem auto;">
+  <div class="card" style="border-top: 4px solid #ef4444;">
+    <div class="card-header">
+      <div class="card-title" style="color: #dc2626;">
+        <i class="fa-solid fa-triangle-exclamation"></i> 確認刪除規格型號主檔
+      </div>
+    </div>
+    <div style="padding: 1rem 0;">
+      <p style="font-size: 1.05rem; margin-bottom: 1rem;">
+        您確定要刪除規格型號 <strong>{{ model.name }} (代碼: {{ model.model_code }})</strong> 嗎？
+      </p>
+
+      <div style="background: #f8fafc; padding: 1rem; border-radius: 8px; margin-bottom: 1.25rem;">
+        <div><strong>型號名稱：</strong> {{ model.name }}</div>
+        <div><strong>型號代碼：</strong> {{ model.model_code }}</div>
+        <div><strong>原廠/供應商：</strong> {{ model.supplier.name|default:"無" }}</div>
+        <div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed #cbd5e1;">
+          <div><strong>關聯硬體設備庫存：</strong> {{ devices_count }} 台</div>
+        </div>
+      </div>
+
+      {% if has_relations %}
+        <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 1.25rem; color: #dc2626; font-size: 0.9rem;">
+          <i class="fa-solid fa-circle-xmark"></i> <strong>無法刪除：</strong> 此規格型號目前仍有 {{ devices_count }} 台硬體設備庫存關聯。請先將設備變更型號或處理後，再進行刪除。
+        </div>
+      {% else %}
+        <p style="color: #dc2626; font-size: 0.875rem;">
+          <i class="fa-solid fa-circle-exclamation"></i> 注意：此操作將永久刪除該規格型號主檔，無法復原。
+        </p>
+      {% endif %}
+    </div>
+
+    <form method="post" style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+      {% csrf_token %}
+      <a href="{% url 'hardware-models' %}" class="btn btn-outline">
+        取消
+      </a>
+      {% if not has_relations %}
+        <button type="submit" class="btn btn-danger">
+          <i class="fa-solid fa-trash"></i> 確認刪除
+        </button>
+      {% endif %}
+    </form>
+  </div>
+</div>
+{% endblock %}

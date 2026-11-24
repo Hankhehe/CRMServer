@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}硬體規格主檔 - CRM Server{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+  <div>
+    <h1 style="font-size: 1.75rem; font-weight: 700; margin-bottom: 0.25rem;">硬體規格主檔</h1>
+    <p style="color: var(--text-muted); font-size: 0.95rem;">維護各硬體設備型號標準規格、自訂擴充規格欄位與庫存水位</p>
+  </div>
+  {% if can_edit_hardware_models or can_edit_probe %}
+    <a href="{% url 'hardware-model-create' %}" class="btn btn-primary">
+      <i class="fa-solid fa-plus"></i> 新增規格型號
+    </a>
+  {% endif %}
+</div>
+
+<div class="card">
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th>型號代碼</th>
+          <th>型號名稱</th>
+          <th>連接埠數</th>
+          <th>CPU</th>
+          <th>記憶體</th>
+          <th>硬碟</th>
+          <th>自訂擴充規格</th>
+          <th>原廠/供應商</th>
+          <th>在庫可用</th>
+          <th>出貨中</th>
+          <th>借測中</th>
+          {% if can_edit_hardware_models or can_edit_probe %}<th style="text-align: right;">操作</th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in models %}
+          <tr>
+            <td><strong style="font-family: monospace;">{{ m.model_code }}</strong></td>
+            <td><strong>{{ m.name }}</strong></td>
+            <td>{{ m.port_count }} Ports</td>
+            <td>{{ m.cpu|default:"-" }}</td>
+            <td>{{ m.memory|default:"-" }}</td>
+            <td>{{ m.hdd|default:"-" }}</td>
+            <td>
+              {% if m.custom_field_schema %}
+                <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                  {% for item in m.custom_field_schema %}
+                    <span class="badge badge-secondary" style="font-size: 0.7rem;" title="預設值: {{ item.default|default:'未設定' }}">
+                      {{ item.label|default:item.key }}{% if item.default %}: {{ item.default }}{% endif %}
+                    </span>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <span style="color: var(--text-muted); font-size: 0.8rem;">無</span>
+              {% endif %}
+            </td>
+            <td>{{ m.supplier.name|default:"-" }}</td>
+            <td><span class="badge badge-available">{{ m.available_count }}</span></td>
+            <td><span class="badge badge-shipped">{{ m.shipped_count }}</span></td>
+            <td><span class="badge badge-loaned">{{ m.loaned_count }}</span></td>
+            {% if can_edit_hardware_models or can_edit_probe %}
+              <td style="text-align: right; white-space: nowrap;">
+                <a href="{% url 'hardware-model-update' m.pk %}" class="btn btn-outline btn-sm">
+                  <i class="fa-solid fa-pen"></i> 編輯
+                </a>
+                <a href="{% url 'hardware-model-delete' m.pk %}" class="btn btn-outline btn-sm" style="color: #ef4444; border-color: rgba(239, 68, 68, 0.3);" title="刪除規格型號">
+                  <i class="fa-solid fa-trash"></i> 刪除
+                </a>
+              </td>
+            {% endif %}
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="12" style="text-align: center; padding: 3rem; color: var(--text-muted);">
+              尚無型號規格主檔
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

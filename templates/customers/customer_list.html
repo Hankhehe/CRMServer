@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+{% load crm_tags %}
+
+{% block title %}客戶名冊{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+  <div>
+    <h1 style="font-size: 1.75rem; font-weight: 700; margin-bottom: 0.25rem;">客戶名冊</h1>
+    <p style="color: var(--text-muted); font-size: 0.95rem;">管理全公司客戶主檔、聯絡窗口名冊與維護合約概況</p>
+  </div>
+  <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+    <a href="{% url 'customer-export' %}?{{ request.GET.urlencode }}" class="btn btn-outline" style="display: inline-flex; align-items: center; gap: 0.5rem;">
+      <i class="fa-solid fa-file-excel" style="color: #10b981;"></i> 匯出 Excel
+    </a>
+    {% if can_edit_customers or can_manage_system %}
+      <a href="{% url 'customer-custom-fields' %}" class="btn btn-outline" style="display: inline-flex; align-items: center; gap: 0.5rem;">
+        <i class="fa-solid fa-sliders" style="color: var(--primary);"></i> 自訂欄位設定
+      </a>
+    {% endif %}
+    {% if can_edit_customers %}
+      <a href="{% url 'customer-import' %}" class="btn btn-outline" style="display: inline-flex; align-items: center; gap: 0.5rem;">
+        <i class="fa-solid fa-file-import" style="color: #3b82f6;"></i> 匯入 Excel
+      </a>
+      <a href="{% url 'customer-create' %}" class="btn btn-primary">
+        <i class="fa-solid fa-plus"></i> 新增客戶
+      </a>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Search Bar & Filters -->
+<div class="card" style="padding: 1rem 1.25rem; margin-bottom: 1.25rem;">
+  <form method="get" style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+    <div style="flex: 1; min-width: 240px; position: relative;">
+      <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: var(--text-muted);"></i>
+      <input type="text" name="q" value="{{ query }}" class="form-control" style="padding-left: 2.5rem;" placeholder="輸入客戶代號、統編、客戶名稱、上層客戶、聯絡人或電話搜尋...">
+    </div>
+
+    <select name="contract_status" class="form-control" style="width: auto; min-width: 150px;">
+      <option value="">全部維護狀態</option>
+      <option value="active" {% if contract_filter == 'active' %}selected{% endif %}>維護中 (合約生效中)</option>
+      <option value="expiring" {% if contract_filter == 'expiring' %}selected{% endif %}>30 天內即將到期</option>
+      <option value="pending" {% if contract_filter == 'pending' %}selected{% endif %}>待生效合約</option>
+      <option value="expired" {% if contract_filter == 'expired' %}selected{% endif %}>合約已過期</option>
+      <option value="terminated" {% if contract_filter == 'terminated' %}selected{% endif %}>合約已終止</option>
+      <option value="none" {% if contract_filter == 'none' %}selected{% endif %}>無維護合約</option>
+    </select>
+
+    <select name="product" class="form-control" style="width: auto; min-width: 160px;">
+      <option value="">全部採購軟體產品</option>
+      {% for prod in products %}
+        <option value="{{ prod.pk }}" {% if product_filter == prod.pk|stringformat:"s" %}selected{% endif %}>{{ prod.name }}</option>
+      {% endfor %}
+    </select>
+
+    <select name="hw_model" class="form-control" style="width: auto; min-width: 160px;">
+      <option value="">全部持有硬體型號</option>
+      {% for hm in hw_models %}
+        <option value="{{ hm.pk }}" {% if hw_model_filter == hm.pk|stringformat:"s" %}selected{% endif %}>{{ hm.name }}</option>
+      {% endfor %}
+    </select>
+
+    {% for cf in custom_filter_defs %}
+      <select name="cf_{{ cf.key }}" class="form-control" style="width: auto; min-width: 150px;">
+        <option value="">全部{{ cf.label }}</option>
+        {% for opt_val, opt_label in cf.choices %}
+          <option value="{{ opt_val }}" {% if cf.selected_value == opt_val %}selected{% endif %}>{{ cf.label }}: {{ opt_label }}</option>
+        {% endfor %}
+      </select>
+    {% endfor %}
+
+    <label style="display: inline-flex; align-items: center; gap: 0.45rem; cursor: pointer; font-size: 0.875rem; font-weight: 600; background: {% if followed_filter == '1' %}rgba(245, 158, 11, 0.14){% else %}#f8fafc{% endif %}; border: 1px solid {% if followed_filter == '1' %}#f59e0b{% else %}#cbd5e1{% endif %}; color: {% if followed_filter == '1' %}#b45309{% else %}var(--text-main){% endif %}; padding: 0.55rem 0.85rem; border-radius: 8px; user-select: none;">
+      <input type="checkbox" name="followed" value="1" {% if followed_filter == '1' %}checked{% endif %} onchange="this.form.submit()" style="accent-color: #f59e0b;">
+      <i class="fa-solid fa-star" style="color: #f59e0b;"></i> 僅顯示我關注的客戶
+    </label>
+
+    <button type="submit" class="btn btn-primary">
+      <i class="fa-solid fa-search"></i> 篩選查詢
+    </button>
+    {% if query or contract_filter or product_filter or hw_model_filter or followed_filter or has_active_custom_filter %}
+      <a href="{% url 'customer-list' %}" class="btn btn-outline">清除條件</a>
+    {% endif %}
+  </form>
+</div>
+
+<!-- Customers Table -->
+<div class="card">
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 72px; text-align: center;">關注</th>
+          <th style="width: 140px;">{% sort_link "code" "客戶代號/統編" %}</th>
+          <th>{% sort_link "name" "客戶名稱" %}</th>
+          <th>自訂欄位</th>
+          <th>主要聯絡人</th>
+          <th>電話</th>
+          <th>電子郵件</th>
+          <th>維護合約狀態</th>
+          <th style="text-align: right;">操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in page_obj %}
+          <tr>
+            <td style="text-align: center;">
+              {% if is_followed_only_scope %}
+                <span style="padding: 0.25rem 0.45rem; font-size: 0.95rem; display: inline-flex; align-items: center; gap: 0.25rem;" title="負責範圍內客戶">
+                  <i class="fa-solid fa-star" style="color: #f59e0b;"></i>
+                  {% if c.followers.count > 0 %}
+                    <span style="font-size: 0.72rem; font-weight: 600; color: var(--text-muted);">{{ c.followers.count }}</span>
+                  {% endif %}
+                </span>
+              {% else %}
+                <form method="post" action="{% url 'customer-follow-toggle' c.pk %}" style="display: inline;">
+                  {% csrf_token %}
+                  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                  <button type="submit"
+                          style="background: none; border: none; cursor: pointer; padding: 0.25rem 0.45rem; border-radius: 6px; font-size: 0.95rem; display: inline-flex; align-items: center; gap: 0.25rem;"
+                          title="{% if c.pk in my_followed_ids %}點擊取消關注此客戶{% else %}點擊關注此客戶{% endif %}">
+                    {% if c.pk in my_followed_ids %}
+                      <i class="fa-solid fa-star" style="color: #f59e0b;"></i>
+                    {% else %}
+                      <i class="fa-regular fa-star" style="color: #94a3b8;"></i>
+                    {% endif %}
+                    {% if c.followers.count > 0 %}
+                      <span style="font-size: 0.72rem; font-weight: 600; color: var(--text-muted);">{{ c.followers.count }}</span>
+                    {% endif %}
+                  </button>
+                </form>
+              {% endif %}
+            </td>
+            <td>
+              <span style="font-family: monospace; font-weight: 700; color: var(--primary);">{{ c.code }}</span>
+            </td>
+            <td>
+              <a href="{% url 'customer-detail' c.pk %}" style="font-weight: 600; color: var(--text-main); text-decoration: none;">
+                {{ c.name }}
+              </a>
+              {% if c.tax_id %}
+                <span style="font-size: 0.75rem; color: var(--text-muted); display: block;">統編: {{ c.tax_id }}</span>
+              {% endif %}
+              {% if c.parent or c.children.count > 0 %}
+                <div style="display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.3rem;">
+                  {% if c.parent %}
+                    {% if not is_followed_only_scope or c.parent_id in my_followed_ids %}
+                      <a href="{% url 'customer-detail' c.parent.pk %}"
+                         style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.72rem; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: rgba(79, 70, 229, 0.08); color: var(--primary); text-decoration: none; border: 1px solid rgba(79, 70, 229, 0.2);"
+                         title="點擊查看上層客戶：{{ c.parent.name }} ({{ c.parent.code }})">
+                        <i class="fa-solid fa-level-up-alt"></i> 上層: {{ c.parent.name }}
+                      </a>
+                    {% else %}
+                      <span style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.72rem; font-weight: 500; padding: 1px 7px; border-radius: 999px; background: #f1f5f9; color: var(--text-muted); border: 1px solid #cbd5e1;"
+                            title="未關注之上層客戶（僅顯示名稱，無檢視權限）">
+                        <i class="fa-solid fa-lock" style="font-size: 0.65rem;"></i> 上層: {{ c.parent.name }}
+                      </span>
+                    {% endif %}
+                  {% endif %}
+                  {% if c.children.count > 0 %}
+                    <a href="{% url 'customer-detail' c.pk %}#card-hierarchy"
+                       style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.72rem; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: rgba(16, 185, 129, 0.1); color: #059669; text-decoration: none; border: 1px solid rgba(16, 185, 129, 0.25);"
+                       title="點擊檢視此客戶的下轄關係鍊">
+                      <i class="fa-solid fa-sitemap"></i> 下轄 {{ c.children.count }} 家
+                    </a>
+                  {% endif %}
+                </div>
+              {% endif %}
+            </td>
+            <td>
+              {% with specs=c.list_custom_specs %}
+                {% if specs %}
+                  <div style="display: flex; flex-wrap: wrap; gap: 4px; max-width: 260px;">
+                    {% for s in specs %}
+                      <span class="badge badge-secondary" style="font-size: 0.72rem; padding: 2px 6px;">{{ s.label }}: {{ s.value }}</span>
+                    {% endfor %}
+                  </div>
+                {% else %}
+                  <span style="color: var(--text-muted); font-size: 0.8rem;">-</span>
+                {% endif %}
+              {% endwith %}
+            </td>
+            <td>{{ c.contact|default:"-" }}</td>
+            <td>{{ c.phone|default:"-" }}</td>
+            <td>{{ c.email|default:"-" }}</td>
+            <td>
+              <span class="badge {{ c.contract_badge_class }}">
+                {{ c.contract_status_display }}
+              </span>
+            </td>
+            <td style="text-align: right;">
+              <a href="{% url 'customer-detail' c.pk %}" class="btn btn-outline btn-sm" title="檢視詳情">
+                <i class="fa-solid fa-eye"></i> 檢視
+              </a>
+              {% if can_edit_customers %}
+                <a href="{% url 'customer-update' c.pk %}" class="btn btn-outline btn-sm" title="編輯客戶">
+                  <i class="fa-solid fa-pen-to-square"></i>
+                </a>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="9" style="text-align: center; padding: 3rem; color: var(--text-muted);">
+              <i class="fa-solid fa-inbox" style="font-size: 2rem; margin-bottom: 0.5rem; display: block;"></i>
+              查無相符的客戶資料
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination -->
+  {% if page_obj.has_other_pages %}
+    <div class="pagination-bar">
+      <div>共 <strong>{{ total_count }}</strong> 筆客戶，目前顯示第 {{ page_obj.number }} / {{ page_obj.paginator.num_pages }} 頁</div>
+      <div style="display: flex; gap: 0.5rem;">
+        {% if page_obj.has_previous %}
+          <a href="{% page_url page_obj.previous_page_number %}" class="btn btn-outline btn-sm">&laquo; 上一頁</a>
+        {% endif %}
+        <span class="btn btn-outline btn-sm" style="cursor: default;">{{ page_obj.number }}</span>
+        {% if page_obj.has_next %}
+          <a href="{% page_url page_obj.next_page_number %}" class="btn btn-outline btn-sm">下一頁 &raquo;</a>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

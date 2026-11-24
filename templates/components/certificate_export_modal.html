@@ -1,0 +1,259 @@
+{% load static %}
+<style>
+  .cert-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.58);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 1200;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 1.25rem;
+  }
+  .cert-modal-overlay.is-open {
+    display: flex;
+  }
+  .cert-modal-dialog {
+    background: #ffffff;
+    border-radius: 16px;
+    width: 100%;
+    max-width: 1240px;
+    max-height: 92vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.35);
+    overflow: hidden;
+  }
+  .cert-modal-header {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--glass-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #f8fafc;
+  }
+  .cert-modal-header-title {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--text-main);
+  }
+  .cert-modal-close {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.25rem;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+  }
+  .cert-modal-close:hover {
+    background: rgba(15, 23, 42, 0.08);
+    color: var(--text-main);
+  }
+  .cert-modal-body {
+    display: grid;
+    grid-template-columns: 350px 1fr;
+    gap: 1.25rem;
+    padding: 1.25rem 1.5rem;
+    overflow-y: auto;
+    flex: 1;
+  }
+  @media (max-width: 960px) {
+    .cert-modal-body {
+      grid-template-columns: 1fr;
+    }
+  }
+  .cert-form-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+  }
+  .cert-form-group label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 0.3rem;
+  }
+  .cert-form-group input,
+  .cert-form-group textarea {
+    width: 100%;
+    padding: 0.55rem 0.75rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 0.88rem;
+    color: var(--text-main);
+    font-family: inherit;
+    background: #ffffff;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .cert-form-group input:focus,
+  .cert-form-group textarea:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+  }
+  .cert-preview-panel {
+    background: #eef2f6;
+    border: 1px solid #dbe2ea;
+    border-radius: 12px;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    min-height: 360px;
+  }
+  .cert-preview-canvas {
+    width: 100%;
+    height: auto;
+    max-height: 64vh;
+    object-fit: contain;
+    background: #ffffff;
+    border-radius: 6px;
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.16);
+  }
+  .cert-preview-loading {
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.85);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    font-weight: 600;
+    color: var(--primary);
+    border-radius: 12px;
+    z-index: 2;
+  }
+  .cert-modal-footer {
+    padding: 0.95rem 1.5rem;
+    border-top: 1px solid var(--glass-border);
+    background: #f8fafc;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+  .cert-footer-hint {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .cert-footer-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+  }
+</style>
+
+<div id="cert-export-modal" class="cert-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="cert-modal-title">
+  <div class="cert-modal-dialog">
+    <div class="cert-modal-header">
+      <div class="cert-modal-header-title">
+        <i class="fa-solid fa-award" style="color: #65a30d;"></i>
+        <span id="cert-modal-title">匯出證書</span>
+      </div>
+      <button type="button" class="cert-modal-close" onclick="window.CertificateExporter.close()" title="關閉 (ESC)" aria-label="關閉">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+
+    <div class="cert-modal-body">
+      <!-- 左側：可即時微調之欄位 -->
+      <div class="cert-form-panel">
+        <div style="font-size: 0.78rem; color: var(--text-muted); background: #f1f5f9; padding: 0.6rem 0.75rem; border-radius: 8px; line-height: 1.5;">
+          <i class="fa-solid fa-circle-info" style="color: var(--primary); margin-right: 0.25rem;"></i>
+          可於下方微調文字內容後再下載（僅影響本次產出圖檔，不會更動資料庫原始紀錄）。
+        </div>
+
+        <div class="cert-form-group">
+          <label for="cert-field-product">產品名稱</label>
+          <textarea id="cert-field-product" rows="2" placeholder="輸入產品名稱"></textarea>
+        </div>
+
+        <div class="cert-form-group">
+          <label id="cert-label-quantity" for="cert-field-quantity">授權數量</label>
+          <input type="text" id="cert-field-quantity" placeholder="例如：20套 或 適用 1,000 個 MAC 軟體授權" />
+        </div>
+
+        <div class="cert-form-group">
+          <label id="cert-label-recipient" for="cert-field-recipient">授權對象</label>
+          <input type="text" id="cert-field-recipient" placeholder="輸入客戶名稱" />
+        </div>
+
+        <div class="cert-form-group">
+          <label id="cert-label-period" for="cert-field-period">授權期間</label>
+          <input type="text" id="cert-field-period" placeholder="例如：2026/01/01~2026/12/31 或 永久授權" />
+        </div>
+
+        <div class="cert-form-group">
+          <label id="cert-label-certno" for="cert-field-certno">授權證號</label>
+          <input type="text" id="cert-field-certno" placeholder="輸入證書編號" />
+        </div>
+
+        <div class="cert-form-group">
+          <label id="cert-label-issuedate" for="cert-field-issuedate">授權開立日期</label>
+          <input type="text" id="cert-field-issuedate" placeholder="例如：民國 115 年 11 月 19 日（留空不顯示）" />
+        </div>
+
+        <div id="cert-custom-bg-wrap" style="display: none; align-items: center; gap: 0.5rem; padding-top: 0.25rem;">
+          <input type="checkbox" id="cert-use-custom-bg" checked style="width: 16px; height: 16px; accent-color: var(--primary); cursor: pointer;" />
+          <label for="cert-use-custom-bg" style="font-size: 0.84rem; font-weight: 600; color: var(--text-main); cursor: pointer;">
+            使用系統自訂底圖範本（取消勾選切換內建底圖）
+          </label>
+        </div>
+      </div>
+
+      <!-- 右側：即時高解析預覽區 -->
+      <div class="cert-preview-panel">
+        <div id="cert-preview-loading" class="cert-preview-loading">
+          <i class="fa-solid fa-spinner fa-spin fa-lg"></i>
+          <span>正在載入證書預覽...</span>
+        </div>
+        <canvas id="cert-preview-canvas" class="cert-preview-canvas" width="2480" height="1754"></canvas>
+        <div style="margin-top: 0.65rem; font-size: 0.78rem; color: var(--text-muted);">
+          輸出解析度：A4 橫式高解析（2480 × 1754 px），右下角保留公司用印空白區域
+        </div>
+      </div>
+    </div>
+
+    <div class="cert-modal-footer">
+      <div class="cert-footer-hint">
+        <i class="fa-solid fa-shield-halved"></i>
+        匯出動作將自動寫入系統審計日誌
+      </div>
+      <div class="cert-footer-actions">
+        <button type="button" class="btn btn-outline btn-sm" onclick="window.CertificateExporter.close()">
+          取消
+        </button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="window.CertificateExporter.printPdf()">
+          <i class="fa-solid fa-print"></i> 列印 / 另存 PDF
+        </button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="window.CertificateExporter.downloadImage('jpg')">
+          <i class="fa-solid fa-file-image"></i> 下載 JPG
+        </button>
+        <button type="button" class="btn btn-primary btn-sm" onclick="window.CertificateExporter.downloadImage('png')">
+          <i class="fa-solid fa-download"></i> 下載高解析 PNG
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="{% static 'js/certificate_exporter.js' %}?v=20261119"></script>

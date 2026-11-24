@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% load crm_tags %}
+
+{% block title %}審計日誌 - CRM Server{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+  <div>
+    <h1 style="font-size: 1.75rem; font-weight: 700; margin-bottom: 0.25rem;">系統審計日誌</h1>
+    <p style="color: var(--text-muted); font-size: 0.95rem;">追蹤使用者登入、客戶與資產建檔、異動及系統設定的所有安全操作歷程</p>
+  </div>
+  <div>
+    <a href="{% url 'audit-log-export' %}?{{ request.GET.urlencode }}" class="btn btn-outline" style="display: inline-flex; align-items: center; gap: 0.5rem;">
+      <i class="fa-solid fa-file-excel" style="color: #10b981;"></i> 匯出 Excel
+    </a>
+  </div>
+</div>
+
+<!-- Retention Policy & Search -->
+<div class="card" style="padding: 1rem 1.25rem; margin-bottom: 1rem;">
+  <form method="post" style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem;">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="update_retention">
+    <div style="display: flex; align-items: center; gap: 0.75rem;">
+      <div style="width: 36px; height: 36px; border-radius: 8px; background: rgba(59, 130, 246, 0.12); color: #3b82f6; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+        <i class="fa-solid fa-clock-rotate-left"></i>
+      </div>
+      <div>
+        <div style="font-weight: 600; font-size: 0.95rem;">
+          日誌保留期限與自動清理
+          {% if retention_days == 0 %}
+            <span class="badge badge-secondary" style="margin-left: 0.4rem;">永久保留</span>
+          {% else %}
+            <span class="badge badge-primary" style="margin-left: 0.4rem;">保留最近 {{ retention_days }} 天</span>
+          {% endif %}
+        </div>
+        <div style="font-size: 0.82rem; color: var(--text-muted);">
+          {% if retention_days == 0 %}
+            目前已停用自動刪除，所有歷史審計日誌將永久保存。
+          {% else %}
+            系統將自動刪除發生時間超過 <strong>{{ retention_days }} 天</strong> 的舊日誌紀錄。
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+      <label for="retentionSelect" style="font-size: 0.88rem; color: var(--text-muted); margin: 0;">保留時間：</label>
+      <select id="retentionSelect" name="retention_days" class="form-control" style="width: auto; min-width: 175px;" onchange="toggleCustomDays(this.value)">
+        {% for val, label in retention_presets %}
+          <option value="{{ val }}" {% if not is_custom_retention and retention_days == val %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+        <option value="custom" {% if is_custom_retention %}selected{% endif %}>自訂天數...</option>
+      </select>
+
+      <div id="customDaysWrap" style="display: {% if is_custom_retention %}inline-flex{% else %}none{% endif %}; align-items: center; gap: 0.35rem;">
+        <input type="number" id="customDaysInput" name="custom_days" min="1" max="36500" value="{% if is_custom_retention %}{{ retention_days }}{% else %}45{% endif %}" class="form-control" style="width: 95px;" placeholder="天數">
+        <span style="font-size: 0.88rem; color: var(--text-muted);">天</span>
+      </div>
+
+      <button type="submit" class="btn btn-primary" style="white-space: nowrap;">
+        <i class="fa-solid fa-floppy-disk"></i> 套用保留設定
+      </button>
+    </div>
+  </form>
+</div>
+
+<script>
+function toggleCustomDays(val) {
+  var wrap = document.getElementById("customDaysWrap");
+  var input = document.getElementById("customDaysInput");
+  if (val === "custom") {
+    wrap.style.display = "inline-flex";
+    if (input) input.focus();
+  } else {
+    wrap.style.display = "none";
+  }
+}
+</script>
+
+<!-- Search -->
+<div class="card" style="padding: 1rem 1.25rem; margin-bottom: 1.25rem;">
+  <form method="get" style="display: flex; gap: 0.75rem; align-items: center;">
+    <div style="flex: 1; position: relative;">
+      <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: var(--text-muted);"></i>
+      <input type="text" name="q" value="{{ query }}" class="form-control" style="padding-left: 2.5rem;" placeholder="搜尋動作、操作人員、標的或詳細內容...">
+    </div>
+    <button type="submit" class="btn btn-primary"><i class="fa-solid fa-search"></i> 搜尋</button>
+    {% if query %}
+      <a href="{% url 'audit-log-list' %}" class="btn btn-outline">清除</a>
+    {% endif %}
+  </form>
+</div>
+
+<div class="card">
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th>時間</th>
+          <th>操作人員</th>
+          <th>執行動作</th>
+          <th>目標模組</th>
+          <th>目標對象</th>
+          <th>詳細資訊</th>
+          <th>IP 位址</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in page_obj %}
+          <tr>
+            <td>{{ log.created_at|date:"Y-m-d H:i:s" }}</td>
+            <td><strong>{{ log.user.username|default:"系統" }}</strong></td>
+            <td><span class="badge badge-secondary">{{ log.action }}</span></td>
+            <td>{{ log.target_type|default:"-" }}</td>
+            <td>{{ log.target_identifier|default:"-" }}</td>
+            <td>{{ log.detail|truncatechars:60|default:"-" }}</td>
+            <td>{{ log.ip_address|default:"-" }}</td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="7" style="text-align: center; padding: 2.5rem; color: var(--text-muted);">
+              無日誌紀錄
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if page_obj.has_other_pages %}
+    <div class="pagination-bar">
+      <div>共 <strong>{{ total_count }}</strong> 筆紀錄，顯示第 {{ page_obj.number }} / {{ page_obj.paginator.num_pages }} 頁</div>
+      <div style="display: flex; gap: 0.5rem;">
+        {% if page_obj.has_previous %}
+          <a href="?page={{ page_obj.previous_page_number }}&q={{ query }}" class="btn btn-outline btn-sm">&laquo; 上一頁</a>
+        {% endif %}
+        <span class="btn btn-outline btn-sm">{{ page_obj.number }}</span>
+        {% if page_obj.has_next %}
+          <a href="?page={{ page_obj.next_page_number }}&q={{ query }}" class="btn btn-outline btn-sm">下一頁 &raquo;</a>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

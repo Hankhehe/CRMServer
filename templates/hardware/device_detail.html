@@ -1,0 +1,326 @@
+{% extends "base.html" %}
+
+{% block title %}設備詳情 - {{ probe.code }} - CRM Server{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+  <div style="display: flex; align-items: center; gap: 1rem;">
+    <a href="{% url 'hardware-list' %}" class="btn btn-outline btn-sm">
+      <i class="fa-solid fa-arrow-left"></i> 回列表
+    </a>
+    <div>
+      <h1 style="font-size: 1.75rem; font-weight: 700; margin-bottom: 0.15rem;">{{ probe.code }}</h1>
+      <span style="color: var(--text-muted); font-size: 0.95rem;">型號: {{ probe.model.name }}</span>
+    </div>
+  </div>
+  <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+    {% if can_approve_hardware %}
+      {% if probe.status == 'pending_ship' or probe.status == 'pending_loan' %}
+        <form method="post" action="{% url 'hardware-approve' probe.pk %}" style="display:inline;" onsubmit="return confirm('確定核准設備「{{ probe.code }}」正式出庫嗎？');">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary" style="background: #059669; border-color: #059669;">
+            <i class="fa-solid fa-stamp"></i> 核准出庫
+          </button>
+        </form>
+        <button type="button" class="btn btn-danger" onclick="document.getElementById('hwDetailRejectModal').style.display='flex'">
+          <i class="fa-solid fa-unlock"></i> 退回並解鎖回庫存
+        </button>
+      {% endif %}
+    {% endif %}
+    {% if can_edit_probe or can_edit_hardware %}
+      <a href="{% url 'hardware-update' probe.pk %}" class="btn btn-primary">
+        <i class="fa-solid fa-pen-to-square"></i> 編輯設備資料
+      </a>
+      <a href="{% url 'hardware-delete' probe.pk %}" class="btn btn-danger btn-sm">
+        <i class="fa-solid fa-trash"></i> 刪除
+      </a>
+    {% endif %}
+  </div>
+</div>
+
+{% if probe.status == 'pending_ship' or probe.status == 'pending_loan' %}
+  <div class="card" style="border-left: 4px solid #d97706; background: rgba(245, 158, 11, 0.08); margin-bottom: 1.5rem; padding: 1rem 1.25rem;">
+    <div style="font-weight: 700; color: #b45309; margin-bottom: 0.3rem;">
+      <i class="fa-solid fa-lock"></i> 此設備目前處於「{{ probe.get_status_display }}」預鎖狀態，等待覆核主管放行
+    </div>
+    {% if pending_approval %}
+      <div style="font-size: 0.875rem; color: var(--text-main);">
+        申請類型：<strong>{{ pending_approval.get_request_type_display }}</strong> ｜
+        目標客戶：<strong>{{ pending_approval.customer.name|default:"-" }}</strong> ｜
+        申請人員：<strong>{{ pending_approval.requested_by.username|default:"-" }}</strong> ({{ pending_approval.requested_at|date:"Y-m-d H:i" }})
+        {% if pending_approval.contract %}
+          ｜ 合約換機：<strong>{{ pending_approval.contract.contract_no }}</strong> (換下舊機: {{ pending_approval.old_probe.code|default:"-" }})
+        {% endif %}
+      </div>
+      {% if pending_approval.note %}
+        <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.25rem;">申請說明：{{ pending_approval.note }}</div>
+      {% endif %}
+    {% endif %}
+  </div>
+{% endif %}
+
+<!-- Basic Info & Specs Grid -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; margin-bottom: 1.5rem;">
+  <!-- Basic Status Card -->
+  <div class="card" style="margin-bottom: 0;">
+    <div class="card-header">
+      <div class="card-title"><i class="fa-solid fa-info-circle"></i> 設備當前狀態</div>
+      <div>
+        {% if probe.status == 'available' %}<span class="badge badge-available">庫存中</span>
+        {% elif probe.status == 'shipped' %}<span class="badge badge-shipped">已出貨</span>
+        {% elif probe.status == 'loaned' %}<span class="badge badge-loaned">借測中</span>
+        {% elif probe.status == 'pending_ship' %}<span class="badge badge-loaned"><i class="fa-solid fa-lock"></i> 出貨待審</span>
+        {% elif probe.status == 'pending_loan' %}<span class="badge badge-loaned"><i class="fa-solid fa-lock"></i> 借測待審</span>
+        {% elif probe.status == 'scrapped' %}<span class="badge badge-scrapped">已報廢</span>
+        {% endif %}
+      </div>
+    </div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+      <div>
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;">進貨日期</div>
+        <div style="font-weight: 600;">{{ probe.acquired_at|date:"Y-m-d"|default:"-" }}</div>
+      </div>
+      <div style="grid-column: 1 / -1;">
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;">目前關聯客戶</div>
+        <div>
+          {% if probe.customer %}
+            {% if can_view_crm %}
+              <a href="{% url 'customer-detail' probe.customer.pk %}" style="color: var(--primary); font-weight: 700; text-decoration: none;">
+                [{{ probe.customer.code }}] {{ probe.customer.name }}
+              </a>
+            {% else %}
+              <span style="font-weight: 700;">[{{ probe.customer.code }}] {{ probe.customer.name }}</span>
+            {% endif %}
+          {% else %}
+            <span style="color: var(--text-muted);">無客戶 (在庫)</span>
+          {% endif %}
+        </div>
+      </div>
+      <div style="grid-column: 1 / -1;">
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;">關聯維護合約</div>
+        <div>
+          {% with contracts=probe.maintenance_contracts.all %}
+            {% if contracts %}
+              <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                {% for c in contracts %}
+                  <a href="{% url 'contract-update' c.pk %}" class="badge badge-primary" style="text-decoration: none;" title="{{ c.name|default:'維護合約' }}">
+                    <i class="fa-solid fa-file-contract"></i> {{ c.contract_no }} ({{ c.get_status_display }})
+                  </a>
+                {% endfor %}
+              </div>
+            {% else %}
+              <span style="color: var(--text-muted);">目前無有效維護合約</span>
+            {% endif %}
+          {% endwith %}
+        </div>
+      </div>
+      {% if probe.status == 'loaned' %}
+        <div style="grid-column: 1 / -1; background: rgba(245, 158, 11, 0.08); padding: 0.75rem 1rem; border-radius: 8px;">
+          <div style="font-size: 0.8rem; color: #b45309; margin-bottom: 0.25rem;">預計歸還日</div>
+          <div style="font-weight: 700; color: #b45309;">
+            {{ probe.expected_return_at|date:"Y-m-d"|default:"未填寫" }}
+            {% if probe.is_loan_overdue %}
+              <span class="badge badge-scrapped" style="margin-left: 8px;">已逾期！</span>
+            {% endif %}
+          </div>
+        </div>
+      {% endif %}
+      {% if probe.note %}
+        <div style="grid-column: 1 / -1;">
+          <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;">備註說明</div>
+          <div style="font-size: 0.9rem;">{{ probe.note }}</div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Hardware Specifications Card -->
+  <div class="card" style="margin-bottom: 0;">
+    <div class="card-header">
+      <div class="card-title">
+        <i class="fa-solid fa-microchip"></i> 硬體規格
+      </div>
+      {% if probe.is_specs_overridden %}
+        <span class="badge badge-secondary">規格有覆寫</span>
+      {% endif %}
+    </div>
+    <div class="table-responsive">
+      <table>
+        <tbody>
+          <tr>
+            <th style="width: 120px;">連接埠數 (Ports)</th>
+            <td>{{ probe.effective_port_count }} Ports {% if probe.port_count is not None %}<span style="color: var(--primary); font-size: 0.75rem;">(客製覆寫)</span>{% endif %}</td>
+          </tr>
+          <tr>
+            <th>處理器 (CPU)</th>
+            <td>{{ probe.effective_cpu|default:"-" }} {% if probe.cpu %}<span style="color: var(--primary); font-size: 0.75rem;">(客製覆寫)</span>{% endif %}</td>
+          </tr>
+          <tr>
+            <th>記憶體 (RAM)</th>
+            <td>{{ probe.effective_memory|default:"-" }} {% if probe.memory %}<span style="color: var(--primary); font-size: 0.75rem;">(客製覆寫)</span>{% endif %}</td>
+          </tr>
+          <tr>
+            <th>硬碟 (Storage)</th>
+            <td>{{ probe.effective_hdd|default:"-" }} {% if probe.hdd %}<span style="color: var(--primary); font-size: 0.75rem;">(客製覆寫)</span>{% endif %}</td>
+          </tr>
+          <tr>
+            <th>原廠 / 供應商</th>
+            <td>{{ probe.effective_supplier.name|default:"-" }} {% if probe.supplier and probe.model.supplier and probe.supplier != probe.model.supplier %}<span style="color: var(--primary); font-size: 0.75rem;">(進貨覆寫)</span>{% endif %}</td>
+          </tr>
+          {% for spec in probe.effective_custom_specs %}
+            <tr>
+              <th>{{ spec.label }}</th>
+              <td>
+                {{ spec.value|default:"-" }}
+                {% if spec.is_overridden %}
+                  <span style="color: var(--primary); font-size: 0.75rem;">(客製覆寫，原預設: {{ spec.default|default:"無" }})</span>
+                {% else %}
+                  <span style="color: var(--text-muted); font-size: 0.75rem;">(型號預設)</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Transaction History Timeline -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">
+      <i class="fa-solid fa-timeline"></i> 庫存進出與異動歷程 ({{ transactions.count }} 次異動)
+    </div>
+  </div>
+  {% if transactions %}
+    <div class="table-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th>交易時間</th>
+            <th>類型</th>
+            <th>關聯客戶</th>
+            <th>預計歸還日</th>
+            <th>經手人</th>
+            <th>備註說明</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in transactions %}
+            <tr>
+              <td>{{ t.occurred_at|date:"Y-m-d H:i" }}</td>
+              <td>
+                {% if t.type == 'IN' %}<span class="badge badge-available">進貨入庫</span>
+                {% elif t.type == 'OUT' %}<span class="badge badge-shipped">正式出貨</span>
+                {% elif t.type == 'LOAN' %}<span class="badge badge-loaned">客戶借測</span>
+                {% elif t.type == 'RETURN_LOAN' %}<span class="badge badge-available">借測歸還</span>
+                {% elif t.type == 'RETURN_OUT' %}<span class="badge badge-repair">出貨退貨</span>
+                {% elif t.type == 'SCRAP' %}<span class="badge badge-scrapped">設備報廢</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if t.customer %}
+                  {% if can_view_crm %}
+                    <a href="{% url 'customer-detail' t.customer.pk %}" style="color: inherit; text-decoration: none; font-weight: 500;">
+                      [{{ t.customer.code }}] {{ t.customer.name }}
+                    </a>
+                  {% else %}
+                    <span style="font-weight: 500;">[{{ t.customer.code }}] {{ t.customer.name }}</span>
+                  {% endif %}
+                {% else %}-{% endif %}
+              </td>
+              <td>{{ t.expected_return_at|date:"Y-m-d"|default:"-" }}</td>
+              <td>{{ t.created_by.username|default:"系統" }}</td>
+              <td>{{ t.note|default:"-" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div style="padding: 2rem; text-align: center; color: var(--text-muted);">
+      尚無異動紀錄
+    </div>
+  {% endif %}
+</div>
+
+{% if approval_history %}
+<div class="card" style="margin-top: 1.5rem;">
+  <div class="card-header">
+    <div class="card-title">
+      <i class="fa-solid fa-stamp"></i> 出庫簽核覆核紀錄 ({{ approval_history|length }} 筆)
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th>申請時間</th>
+          <th>出庫類別</th>
+          <th>目標客戶</th>
+          <th>申請人</th>
+          <th>簽核狀態</th>
+          <th>覆核人 / 時間</th>
+          <th>說明 / 退回原因</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in approval_history %}
+          <tr>
+            <td>{{ a.requested_at|date:"Y-m-d H:i" }}</td>
+            <td>{{ a.get_request_type_display }}</td>
+            <td>{{ a.customer.name|default:"-" }}</td>
+            <td>{{ a.requested_by.username|default:"-" }}</td>
+            <td>
+              {% if a.approval_status == 'approved' %}<span class="badge badge-available">已核准</span>
+              {% elif a.approval_status == 'pending' %}<span class="badge badge-loaned">待覆核</span>
+              {% else %}<span class="badge badge-scrapped">已退回</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if a.reviewed_by %}
+                {{ a.reviewed_by.username }} ({{ a.reviewed_at|date:"Y-m-d H:i"|default:"-" }})
+              {% else %}-{% endif %}
+            </td>
+            <td>
+              {% if a.approval_status == 'rejected' and a.rejection_reason %}
+                <span style="color:#dc2626; font-weight:600;">退回原因：{{ a.rejection_reason }}</span>
+              {% else %}
+                {{ a.note|default:"-" }}
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if can_approve_hardware %}
+  {% if probe.status == 'pending_ship' or probe.status == 'pending_loan' %}
+  <div id="hwDetailRejectModal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.55); z-index:9999; align-items:center; justify-content:center; padding:1rem;">
+    <div class="card" style="width:100%; max-width:480px; margin:0;">
+      <h3 style="font-size:1.15rem; font-weight:700; margin-bottom:0.5rem; color:#dc2626;">
+        <i class="fa-solid fa-rotate-left"></i> 退回硬體出庫申請：{{ probe.code }}
+      </h3>
+      <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem;">
+        請填寫退回原因，退回後該設備將<strong>自動解鎖釋放回「庫存中」</strong>並通知申請人員：
+      </p>
+      <form method="post" action="{% url 'hardware-reject' probe.pk %}">
+        {% csrf_token %}
+        <div class="form-group">
+          <label>退回原因說明 <span style="color:#dc2626;">*</span></label>
+          <textarea name="rejection_reason" class="form-control" rows="3" required placeholder="請說明退回原因..."></textarea>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:1rem;">
+          <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('hwDetailRejectModal').style.display='none'">取消</button>
+          <button type="submit" class="btn btn-danger btn-sm"><i class="fa-solid fa-unlock"></i> 確認退回並解鎖</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+{% endif %}
+{% endblock %}

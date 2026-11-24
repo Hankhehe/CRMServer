@@ -1,0 +1,421 @@
+{% extends "base.html" %}
+
+{% block title %}帳號與權限角色 - CRM Server{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+  <div>
+    <h1 style="font-size: 1.75rem; font-weight: 700; margin-bottom: 0.25rem;">帳號與角色管理</h1>
+    <p style="color: var(--text-muted); font-size: 0.95rem;">集中管理系統帳號、自訂權限角色與客戶資料視野</p>
+  </div>
+  <div>
+    {% if active_tab == 'roles' %}
+      <a href="{% url 'role-create' %}" class="btn btn-primary">
+        <i class="fa-solid fa-plus"></i> 新增自訂角色
+      </a>
+    {% elif active_tab == 'accounts' or not active_tab %}
+      <a href="{% url 'account-create' %}" class="btn btn-primary">
+        <i class="fa-solid fa-user-plus"></i> 建立本機帳號
+      </a>
+    {% endif %}
+  </div>
+</div>
+
+<!-- 分頁切換 Tabs -->
+<div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem; border-bottom: 1px solid var(--glass-border); padding-bottom: 0.75rem; flex-wrap: wrap;">
+  <a href="?tab=accounts" class="btn {% if active_tab == 'accounts' or not active_tab and active_tab != 'roles' and active_tab != 'approval' and active_tab != 'timeout' %}btn-primary{% else %}btn-outline{% endif %} btn-sm" style="font-weight: 600;">
+    <i class="fa-solid fa-users"></i> 帳號列表 ({{ users|length }})
+  </a>
+  <a href="?tab=roles" class="btn {% if active_tab == 'roles' %}btn-primary{% else %}btn-outline{% endif %} btn-sm" style="font-weight: 600;">
+    <i class="fa-solid fa-shield-halved"></i> 角色權限管理 ({{ roles|length }})
+  </a>
+  <a href="?tab=approval" class="btn {% if active_tab == 'approval' %}btn-primary{% else %}btn-outline{% endif %} btn-sm" style="font-weight: 600;">
+    <i class="fa-solid fa-stamp"></i> 簽核流程設定
+  </a>
+  <a href="?tab=timeout" class="btn {% if active_tab == 'timeout' %}btn-primary{% else %}btn-outline{% endif %} btn-sm" style="font-weight: 600;">
+    <i class="fa-solid fa-clock"></i> 閒置登出時間設定
+  </a>
+</div>
+
+{% if active_tab == 'roles' %}
+  <!-- 角色列表 Tab -->
+  <div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <h2 style="font-size: 1.15rem; font-weight: 600; margin: 0;">
+        <i class="fa-solid fa-id-badge" style="color: var(--primary);"></i> 系統角色主檔清單
+      </h2>
+      <div style="font-size: 0.85rem; color: var(--text-muted);">
+        💡 修改角色權限後，所有套用該角色的帳號將即時同步生效。
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th>角色名稱</th>
+            <th>角色代碼</th>
+            <th>類型</th>
+            <th>職責描述與備註</th>
+            <th>啟用功能模組</th>
+            <th>客戶資料視野</th>
+            <th style="text-align: center;">套用人數</th>
+            <th style="text-align: right;">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in roles %}
+            <tr>
+              <td>
+                <strong style="color: var(--text-main); font-size: 0.95rem;">{{ r.name }}</strong>
+              </td>
+              <td><code>{{ r.code }}</code></td>
+              <td>
+                {% if r.is_system %}
+                  <span class="badge badge-primary" title="系統核心預設角色"><i class="fa-solid fa-lock"></i> 系統內建</span>
+                {% else %}
+                  <span class="badge badge-loaned" title="管理者建立之自訂角色"><i class="fa-solid fa-sliders"></i> 自訂角色</span>
+                {% endif %}
+              </td>
+              <td style="max-width: 250px; font-size: 0.85rem; color: var(--text-muted);">
+                {{ r.description|default:"-" }}
+              </td>
+              <td>
+                <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                  {% for lbl in r.active_permission_labels %}
+                    <span class="badge badge-secondary" style="font-size: 0.75rem;">{{ lbl }}</span>
+                  {% empty %}
+                    <span style="color: var(--text-muted); font-size: 0.8rem;">無</span>
+                  {% endfor %}
+                </div>
+              </td>
+              <td>
+                {% if not r.can_view_crm %}
+                  <span class="badge badge-secondary">無 (僅硬體設備)</span>
+                {% elif r.customer_scope == 'followed' %}
+                  <span class="badge badge-loaned" title="業務資料隔離：僅能查閱已關注客戶"><i class="fa-solid fa-user-lock"></i> 僅限關注客戶</span>
+                {% else %}
+                  <span class="badge badge-available" title="全域可見：可查看全公司客戶"><i class="fa-solid fa-globe"></i> 全域可見</span>
+                {% endif %}
+              </td>
+              <td style="text-align: center;">
+                <span class="badge badge-secondary" style="font-size: 0.85rem;">{{ r.user_count }} 位</span>
+              </td>
+              <td style="text-align: right; white-space: nowrap;">
+                <a href="{% url 'role-update' r.pk %}" class="btn btn-outline btn-sm" title="編輯角色權限">
+                  <i class="fa-solid fa-pen-to-square"></i> 編輯
+                </a>
+                {% if not r.is_system %}
+                  <a href="{% url 'role-delete' r.pk %}" class="btn btn-danger btn-sm" title="刪除角色" onclick="return confirm('確定要刪除自訂角色「{{ r.name }}」嗎？');">
+                    <i class="fa-solid fa-trash"></i>
+                  </a>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+                尚未建立任何角色。
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+{% elif active_tab == 'approval' %}
+  <!-- 簽核流程設定 Tab -->
+  <div class="card" style="max-width: 860px; margin-bottom: 1.5rem;">
+    <div style="margin-bottom: 1.25rem;">
+      <h2 style="font-size: 1.2rem; font-weight: 700; margin: 0 0 0.5rem 0; display: flex; align-items: center; gap: 0.5rem;">
+        <i class="fa-solid fa-stamp" style="color: var(--primary);"></i> 全域簽核覆核流程開關設定
+      </h2>
+      <p style="color: var(--text-muted); font-size: 0.9rem; line-height: 1.6;">
+        三個模組的審核開關彼此完全獨立。當某項簽核開關開啟時，僅有「開單/編輯權限」但未具備該項「覆核權限」的帳號開立單據（或修改核心商務條件）時，將自動進入<strong>「待覆核」</strong>狀態，必須由具備覆核權限的帳號核准後才正式成立；若開單人本身已具備該項覆核權限，開單時將自動核准生效。
+      </p>
+    </div>
+
+    <form method="post" action="?tab=approval">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="save_approval_workflow">
+
+      <div style="display: flex; flex-direction: column; gap: 1rem; margin-bottom: 1.5rem;">
+        <!-- 開關 1：軟體授權書 -->
+        <div style="border: 1px solid var(--glass-border); border-radius: 10px; padding: 1rem 1.25rem; background: rgba(255,255,255,0.6); display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;">
+          <label for="id_require_license_approval" style="display: flex; align-items: flex-start; gap: 0.85rem; cursor: pointer; margin: 0; flex: 1;">
+            <div style="padding-top: 2px;">{{ approval_form.require_license_approval }}</div>
+            <div>
+              <div style="font-weight: 700; font-size: 1rem; color: var(--text-main);">
+                <i class="fa-solid fa-certificate" style="color: #8b5cf6; margin-right: 4px;"></i> 啟用「軟體授權書」簽核覆核流程
+              </div>
+              <div style="font-size: 0.825rem; color: var(--text-muted); margin-top: 0.25rem; line-height: 1.5;">
+                未覆核通過前禁止預覽/匯出正式授權證書，且不計入生效中授權統計。修改核心授權條件時將自動重進待覆核（僅改備註則維持已核准）。
+              </div>
+            </div>
+          </label>
+          <div>
+            {% if system_settings.require_license_approval %}
+              <span class="badge badge-available"><i class="fa-solid fa-check"></i> 已啟用簽核</span>
+            {% else %}
+              <span class="badge badge-secondary">關閉 (直接生效)</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- 開關 2：維護保固合約 -->
+        <div style="border: 1px solid var(--glass-border); border-radius: 10px; padding: 1rem 1.25rem; background: rgba(255,255,255,0.6); display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;">
+          <label for="id_require_warranty_approval" style="display: flex; align-items: flex-start; gap: 0.85rem; cursor: pointer; margin: 0; flex: 1;">
+            <div style="padding-top: 2px;">{{ approval_form.require_warranty_approval }}</div>
+            <div>
+              <div style="font-weight: 700; font-size: 1rem; color: var(--text-main);">
+                <i class="fa-solid fa-file-contract" style="color: #10b981; margin-right: 4px;"></i> 啟用「維護保固合約」簽核覆核流程
+              </div>
+              <div style="font-size: 0.825rem; color: var(--text-muted); margin-top: 0.25rem; line-height: 1.5;">
+                未覆核通過前禁止匯出正式軟體保固證書，且不計入客戶有效合約與到期預警。修改核心合約條件時重進待覆核（僅改備註或上傳附件則維持已核准）。
+              </div>
+            </div>
+          </label>
+          <div>
+            {% if system_settings.require_warranty_approval %}
+              <span class="badge badge-available"><i class="fa-solid fa-check"></i> 已啟用簽核</span>
+            {% else %}
+              <span class="badge badge-secondary">關閉 (直接生效)</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- 開關 3：硬體設備出庫 -->
+        <div style="border: 1px solid var(--glass-border); border-radius: 10px; padding: 1rem 1.25rem; background: rgba(255,255,255,0.6); display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;">
+          <label for="id_require_hardware_approval" style="display: flex; align-items: flex-start; gap: 0.85rem; cursor: pointer; margin: 0; flex: 1;">
+            <div style="padding-top: 2px;">{{ approval_form.require_hardware_approval }}</div>
+            <div>
+              <div style="font-weight: 700; font-size: 1rem; color: var(--text-main);">
+                <i class="fa-solid fa-truck-fast" style="color: #06b6d4; margin-right: 4px;"></i> 啟用「硬體設備出庫」簽核覆核流程
+              </div>
+              <div style="font-size: 0.825rem; color: var(--text-muted); margin-top: 0.25rem; line-height: 1.5;">
+                涵蓋「正式出貨、客戶借測、維護合約故障換機新機出庫」。等待覆核期間自動預鎖該設備為「出貨待審 / 借測待審」防止重複配發，退回時自動釋放回庫存中（進貨入庫、退貨歸還與報廢免審核）。
+              </div>
+            </div>
+          </label>
+          <div>
+            {% if system_settings.require_hardware_approval %}
+              <span class="badge badge-available"><i class="fa-solid fa-check"></i> 已啟用簽核</span>
+            {% else %}
+              <span class="badge badge-secondary">關閉 (直接出庫)</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; padding-top: 0.75rem; border-top: 1px solid var(--glass-border);">
+        <div style="font-size: 0.825rem; color: var(--text-muted);">
+          💡 欲指派哪些同仁可擔任覆核主管，請至「<a href="?tab=accounts" style="color: var(--primary); font-weight: 600;">帳號列表</a>」編輯個別帳號，或至「<a href="?tab=roles" style="color: var(--primary); font-weight: 600;">角色權限管理</a>」勾選覆核權限。
+        </div>
+        <button type="submit" class="btn btn-primary" style="padding: 0.6rem 1.5rem; font-weight: 600;">
+          <i class="fa-solid fa-floppy-disk"></i> 儲存簽核開關設定
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- 待覆核單據現況與快速放行管理 -->
+  <div class="card" style="max-width: 860px;">
+    <h3 style="font-size: 1.05rem; font-weight: 700; margin: 0 0 0.75rem 0;">
+      <i class="fa-solid fa-hourglass-half" style="color: #d97706;"></i> 目前系統待覆核單據統計與管理
+    </h3>
+    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+      若您中途關閉某項簽核開關，先前已進入「待覆核」的單據仍會安全保留待審狀態，您可前往各列表逐筆審核，或於下方直接一鍵全數核准放行：
+    </p>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 1rem;">
+      <div style="border: 1px solid var(--glass-border); border-radius: 8px; padding: 0.9rem 1rem; display: flex; flex-direction: column; justify-content: space-between; gap: 0.75rem;">
+        <div>
+          <div style="font-size: 0.85rem; color: var(--text-muted);">待覆核軟體授權書</div>
+          <div style="font-size: 1.5rem; font-weight: 700; color: {% if pending_summary.licenses > 0 %}#d97706{% else %}var(--text-main){% endif %};">{{ pending_summary.licenses }} 筆</div>
+        </div>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+          <a href="{% url 'license-list' %}?approval=pending" class="btn btn-outline btn-sm">前往查看</a>
+          {% if pending_summary.licenses > 0 %}
+            <form method="post" action="?tab=approval" style="display:inline;" onsubmit="return confirm('確定要將目前所有 {{ pending_summary.licenses }} 筆待覆核軟體授權書全部核准生效嗎？');">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="approve_all_pending_licenses">
+              <button type="submit" class="btn btn-primary btn-sm">一鍵全數核准</button>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+
+      <div style="border: 1px solid var(--glass-border); border-radius: 8px; padding: 0.9rem 1rem; display: flex; flex-direction: column; justify-content: space-between; gap: 0.75rem;">
+        <div>
+          <div style="font-size: 0.85rem; color: var(--text-muted);">待覆核維護保固合約</div>
+          <div style="font-size: 1.5rem; font-weight: 700; color: {% if pending_summary.contracts > 0 %}#d97706{% else %}var(--text-main){% endif %};">{{ pending_summary.contracts }} 筆</div>
+        </div>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+          <a href="{% url 'contract-list' %}?approval=pending" class="btn btn-outline btn-sm">前往查看</a>
+          {% if pending_summary.contracts > 0 %}
+            <form method="post" action="?tab=approval" style="display:inline;" onsubmit="return confirm('確定要將目前所有 {{ pending_summary.contracts }} 筆待覆核維護保固合約全部核准生效嗎？');">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="approve_all_pending_contracts">
+              <button type="submit" class="btn btn-primary btn-sm">一鍵全數核准</button>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+
+      <div style="border: 1px solid var(--glass-border); border-radius: 8px; padding: 0.9rem 1rem; display: flex; flex-direction: column; justify-content: space-between; gap: 0.75rem;">
+        <div>
+          <div style="font-size: 0.85rem; color: var(--text-muted);">待覆核硬體出庫申請</div>
+          <div style="font-size: 1.5rem; font-weight: 700; color: {% if pending_summary.hardware > 0 %}#d97706{% else %}var(--text-main){% endif %};">{{ pending_summary.hardware }} 筆</div>
+        </div>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+          <a href="{% url 'hardware-list' %}?approval=pending" class="btn btn-outline btn-sm">前往查看</a>
+          {% if pending_summary.hardware > 0 %}
+            <form method="post" action="?tab=approval" style="display:inline;" onsubmit="return confirm('確定要將目前所有 {{ pending_summary.hardware }} 筆待覆核硬體出庫申請全部核准出庫嗎？');">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="approve_all_pending_hardware">
+              <button type="submit" class="btn btn-primary btn-sm">一鍵全數核准</button>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+{% elif active_tab == 'timeout' %}
+  <!-- 閒置登出時間設定 Tab -->
+  <div class="card" style="max-width: 680px;">
+    <div style="margin-bottom: 1.25rem;">
+      <h2 style="font-size: 1.15rem; font-weight: 600; margin: 0 0 0.5rem 0;">
+        <i class="fa-solid fa-clock-rotate-left" style="color: var(--primary);"></i> 系統閒置自動登出設定
+      </h2>
+      <p style="color: var(--text-muted); font-size: 0.9rem; line-height: 1.5;">
+        為確保系統安全性，當使用者在畫面持續無操作（無滑鼠、鍵盤或觸控動作）達到設定時間，或關閉瀏覽器超過設定時間後，系統將自動將其登出。
+      </p>
+    </div>
+
+    <form method="post" action="?tab=timeout">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="save_idle_timeout">
+
+      <div class="form-group" style="margin-bottom: 1.5rem;">
+        <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: var(--text-main);">
+          閒置自動登出時間 (分鐘) <span style="color: #ef4444;">*</span>
+        </label>
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          {{ timeout_form.idle_timeout_minutes }}
+          <span style="font-weight: 500; color: var(--text-muted);">分鐘</span>
+        </div>
+        {% if timeout_form.idle_timeout_minutes.errors %}
+          <div style="color: #ef4444; font-size: 0.85rem; margin-top: 0.35rem;">
+            {{ timeout_form.idle_timeout_minutes.errors.0 }}
+          </div>
+        {% endif %}
+        <div style="font-size: 0.825rem; color: var(--text-muted); margin-top: 0.5rem;">
+          💡 有效設定範圍為 <strong>1 至 1440 分鐘</strong>（預設為 10 分鐘）。修改後將立即對所有登入使用者生效。
+        </div>
+      </div>
+
+      <div style="background: var(--primary-light); border-left: 4px solid var(--primary); padding: 0.85rem 1rem; border-radius: 6px; margin-bottom: 1.5rem; font-size: 0.875rem; color: var(--text-main);">
+        <div style="font-weight: 600; margin-bottom: 0.25rem;"><i class="fa-solid fa-shield-halved"></i> 機制說明</div>
+        <ul style="margin: 0; padding-left: 1.25rem; color: var(--text-muted); line-height: 1.6;">
+          <li>當前操作畫面持續無操作超過此時間，將自動強制登出並返回登入頁面。</li>
+          <li>使用者直接關閉瀏覽器超過此時間後重新進入系統，後端工作階段亦將自動失效。</li>
+        </ul>
+      </div>
+
+      <button type="submit" class="btn btn-primary">
+        <i class="fa-solid fa-floppy-disk"></i> 儲存設定
+      </button>
+    </form>
+  </div>
+
+{% else %}
+  <!-- 帳號列表 Tab -->
+  <div class="card">
+    <div class="table-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th>使用者帳號</th>
+            <th>姓名</th>
+            <th>電子郵件</th>
+            <th>類型</th>
+            <th>套用系統角色</th>
+            <th>客戶資料可視範圍</th>
+            <th>狀態</th>
+            <th style="text-align: right;">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in users %}
+            <tr>
+              <td>
+                <strong>{{ u.username }}</strong>
+                {% if u.is_superuser %}
+                  <span class="badge badge-repair" style="font-size: 0.7rem; margin-left: 4px;">超級管理員</span>
+                {% endif %}
+              </td>
+              <td>{{ u.get_full_name|default:u.username }}</td>
+              <td>{{ u.email|default:"-" }}</td>
+              <td>
+                {% if u.profile.distinguished_name %}
+                  <span class="badge badge-loaned">AD 網域</span>
+                {% else %}
+                  <span class="badge badge-secondary">本機</span>
+                {% endif %}
+              </td>
+              <td>
+                <span class="role-badge" title="啟用權限：{{ u.profile.active_permission_labels|join:'、' }}">
+                  {{ u.profile.get_role_display_name }}
+                </span>
+                <div style="display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px;">
+                  {% if u.profile.has_license_approve_access %}
+                    <span class="badge badge-repair" style="font-size: 0.68rem;" title="可覆核軟體授權書"><i class="fa-solid fa-stamp"></i> 授權覆核</span>
+                  {% endif %}
+                  {% if u.profile.has_contract_approve_access %}
+                    <span class="badge badge-available" style="font-size: 0.68rem;" title="可覆核維護保固合約"><i class="fa-solid fa-stamp"></i> 保固覆核</span>
+                  {% endif %}
+                  {% if u.profile.has_hardware_approve_access %}
+                    <span class="badge badge-shipped" style="font-size: 0.68rem;" title="可覆核硬體設備出庫"><i class="fa-solid fa-stamp"></i> 硬體覆核</span>
+                  {% endif %}
+                </div>
+              </td>
+              <td>
+                {% if not u.profile.has_crm_view_access and not u.is_superuser %}
+                  <span class="badge badge-secondary" title="此角色僅查詢硬體庫存，不存取客戶名冊">無 (僅硬體設備)</span>
+                {% elif u.profile.is_followed_only_scope and not u.is_superuser %}
+                  <span class="badge badge-loaned" title="此帳號僅能查看與搜尋自己已關注/負責之客戶"><i class="fa-solid fa-user-lock"></i> 僅限關注客戶</span>
+                {% else %}
+                  <span class="badge badge-available" title="此帳號可查看與搜尋全公司所有客戶"><i class="fa-solid fa-globe"></i> 全部客戶</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if u.is_active %}
+                  <span class="badge badge-available">啟用</span>
+                {% else %}
+                  <span class="badge badge-scrapped">停用</span>
+                {% endif %}
+              </td>
+              <td style="text-align: right;">
+                <a href="{% url 'account-update' u.pk %}" class="btn btn-outline btn-sm" title="更換角色或編輯帳號">
+                  <i class="fa-solid fa-user-pen"></i>
+                </a>
+                {% if not u.profile.distinguished_name %}
+                  <a href="{% url 'account-change-password' u.pk %}" class="btn btn-outline btn-sm" title="重設密碼">
+                    <i class="fa-solid fa-key"></i>
+                  </a>
+                {% endif %}
+                {% if u.username != 'admin' and u != request.user %}
+                  <a href="{% url 'account-delete' u.pk %}" class="btn btn-danger btn-sm" title="刪除帳號" onclick="return confirm('確定要刪除帳號「{{ u.username }}」嗎？');">
+                    <i class="fa-solid fa-trash"></i>
+                  </a>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+  <title>登入 - CRM Server</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    :root {
+      --primary: #4f46e5;
+      --primary-hover: #4338ca;
+      --bg-gradient: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+      --glass-bg: rgba(255, 255, 255, 0.88);
+      --glass-border: rgba(15, 23, 42, 0.08);
+      --glass-shadow: 0 20px 25px -5px rgba(148, 163, 184, 0.15), 0 8px 10px -6px rgba(148, 163, 184, 0.15);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg-gradient);
+      color: #0f172a;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .login-container {
+      background: var(--glass-bg);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      padding: 3rem 2.5rem;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: var(--glass-shadow);
+    }
+    .login-header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    .login-header .brand-icon {
+      font-size: 2.5rem;
+      color: var(--primary);
+      margin-bottom: 0.75rem;
+      display: inline-block;
+    }
+    .login-header h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 0.25rem;
+    }
+    .login-header p {
+      color: #64748b;
+      font-size: 0.9rem;
+    }
+    .account-type-selector {
+      display: flex;
+      background: #f1f5f9;
+      border-radius: 8px;
+      padding: 0.25rem;
+      margin-bottom: 1.25rem;
+    }
+    .selector-option {
+      flex: 1;
+      text-align: center;
+      padding: 0.5rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 600;
+      transition: all 0.2s ease;
+      color: #64748b;
+    }
+    .selector-option.active {
+      background: var(--primary);
+      color: white;
+      box-shadow: 0 4px 10px -2px rgba(79, 70, 229, 0.35);
+    }
+    .form-group {
+      margin-bottom: 1.25rem;
+    }
+    .form-group label {
+      display: block;
+      margin-bottom: 0.4rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #0f172a;
+    }
+    .form-control {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      border: 1px solid #cbd5e1;
+      font-size: 0.95rem;
+      transition: all 0.2s;
+    }
+    .form-control:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+    }
+    .btn-login {
+      width: 100%;
+      padding: 0.85rem;
+      border-radius: 8px;
+      border: none;
+      background: var(--primary);
+      color: white;
+      font-weight: 600;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-top: 0.75rem;
+    }
+    .btn-login:hover {
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+    }
+    .error-msg {
+      background: rgba(239, 68, 68, 0.08);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+      color: #dc2626;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      margin-bottom: 1.25rem;
+      font-size: 0.875rem;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-container">
+    <div class="login-header">
+      <div class="brand-icon"><i class="fa-solid fa-cube"></i></div>
+      <h1>CRM Server</h1>
+      <p>客戶關係、維護合約與資產管理</p>
+    </div>
+
+    {% if messages %}
+      {% for message in messages %}
+        <div style="background: {% if message.tags == 'success' %}#f0fdf4; color: #166534; border: 1px solid #bbf7d0{% else %}#fef2f2; color: #991b1b; border: 1px solid #fecaca{% endif %}; padding: 0.75rem 1rem; border-radius: 8px; font-size: 0.875rem; margin-bottom: 1.25rem;">
+          <i class="fa-solid {% if message.tags == 'success' %}fa-circle-check{% else %}fa-circle-exclamation{% endif %}" style="margin-right: 0.4rem;"></i>
+          {{ message }}
+        </div>
+      {% endfor %}
+    {% endif %}
+
+    {% if form.errors %}
+      <div class="error-msg">帳號或密碼錯誤，請再試一次。</div>
+    {% endif %}
+
+    <form method="post" action="{% url 'login' %}">
+      {% csrf_token %}
+      
+      <div class="form-group">
+        <label>帳號認證類型</label>
+        <div class="account-type-selector">
+          <label class="selector-option active" id="option-local">
+            <input type="radio" name="account_type" value="local" checked style="display: none;">
+            <span>本機帳號</span>
+          </label>
+          <label class="selector-option" id="option-ad">
+            <input type="radio" name="account_type" value="ad" style="display: none;">
+            <span>AD 網域帳號</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="id_username">登入帳號</label>
+        <input type="text" name="username" class="form-control" id="id_username" required autofocus placeholder="請輸入帳號">
+      </div>
+
+      <div class="form-group">
+        <label for="id_password">登入密碼</label>
+        <input type="password" name="password" class="form-control" id="id_password" required placeholder="請輸入密碼">
+      </div>
+
+      <button type="submit" class="btn-login">
+        <i class="fa-solid fa-right-to-bracket"></i> 登入系統
+      </button>
+    </form>
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      const optionLocal = document.getElementById('option-local');
+      const optionAd = document.getElementById('option-ad');
+      const localRadio = optionLocal.querySelector('input[type="radio"]');
+      const adRadio = optionAd.querySelector('input[type="radio"]');
+
+      optionLocal.addEventListener('click', () => {
+        optionLocal.classList.add('active');
+        optionAd.classList.remove('active');
+        localRadio.checked = true;
+      });
+
+      optionAd.addEventListener('click', () => {
+        optionAd.classList.add('active');
+        optionLocal.classList.remove('active');
+        adRadio.checked = true;
+      });
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_create %}新增軟體產品{% else %}編輯產品: {{ product.name }}{% endif %} - CRM Server{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+  <div>
+    <h1 style="font-size: 1.75rem; font-weight: 700; margin-bottom: 0.25rem;">
+      {% if is_create %}新增軟體產品主檔{% else %}編輯軟體產品: {{ product.name }}{% endif %}
+    </h1>
+    <p style="color: var(--text-muted); font-size: 0.95rem;">設定產品代碼、預設計量單位與自訂擴充欄位規格</p>
+  </div>
+  <a href="{% url 'product-list' %}" class="btn btn-outline">
+    <i class="fa-solid fa-arrow-left"></i> 回產品列表
+  </a>
+</div>
+
+<div style="max-width: 1080px; margin: 0 auto;">
+  <!-- Product Main Form -->
+  <div class="card" style="margin-bottom: 0;">
+    <div class="card-header">
+      <div class="card-title">
+        <i class="fa-solid fa-cube"></i> 產品主檔基本設定
+      </div>
+    </div>
+    <form method="post">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="alert alert-error" style="margin-bottom: 1rem;">
+          {% for error in form.non_field_errors %}
+            <div>{{ error }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+        <div class="form-group">
+          <label for="{{ form.code.id_for_label }}">產品代碼 *</label>
+          {{ form.code }}
+          {% if form.code.errors %}<div style="color: #dc2626; font-size: 0.8rem; margin-top: 0.25rem;">{{ form.code.errors.0 }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.name.id_for_label }}">產品名稱 *</label>
+          {{ form.name }}
+          {% if form.name.errors %}<div style="color: #dc2626; font-size: 0.8rem; margin-top: 0.25rem;">{{ form.name.errors.0 }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+        <div class="form-group">
+          <label for="{{ form.category.id_for_label }}">產品類別</label>
+          {{ form.category }}
+          {% if form.category.errors %}<div style="color: #dc2626; font-size: 0.8rem; margin-top: 0.25rem;">{{ form.category.errors.0 }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.default_unit.id_for_label }}">預設計量單位 *</label>
+          {{ form.default_unit }}
+          {% if form.default_unit.errors %}<div style="color: #dc2626; font-size: 0.8rem; margin-top: 0.25rem;">{{ form.default_unit.errors.0 }}</div>{% endif %}
+        </div>
+      </div>
+
+      <!-- 自訂擴充規格欄位 UI 編輯器 -->
+      {% include "components/custom_field_builder.html" %}
+
+      <div class="form-group">
+        <label for="{{ form.note.id_for_label }}">產品備註說明</label>
+        {{ form.note }}
+        {% if form.note.errors %}<div style="color: #dc2626; font-size: 0.8rem; margin-top: 0.25rem;">{{ form.note.errors.0 }}</div>{% endif %}
+      </div>
+
+      <div class="form-group" style="display: flex; align-items: center;">
+        <label style="display: flex; align-items: center; cursor: pointer; font-weight: 600;">
+          {{ form.is_active }} 啟用此產品
+        </label>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem;">
+        <a href="{% url 'product-list' %}" class="btn btn-outline">取消</a>
+        <button type="submit" class="btn btn-primary">
+          <i class="fa-solid fa-floppy-disk"></i> 儲存產品設定
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}

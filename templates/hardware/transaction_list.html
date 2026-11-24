@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% load crm_tags %}
+
+{% block title %}庫存異動交易歷程 - CRM Server{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+  <div>
+    <h1 style="font-size: 1.75rem; font-weight: 700; margin-bottom: 0.25rem;">庫存異動交易歷程</h1>
+    <p style="color: var(--text-muted); font-size: 0.95rem;">設備完整出入庫、客戶借測、退貨歸還與報廢審計流水帳</p>
+  </div>
+  {% if can_edit_probe %}
+    <a href="{% url 'transaction-create' %}" class="btn btn-primary">
+      <i class="fa-solid fa-plus"></i> 建立庫存異動單
+    </a>
+  {% endif %}
+</div>
+
+<!-- Type Filters -->
+<div style="display: flex; gap: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap;">
+  <a href="{% url 'hardware-transactions' %}" class="btn {% if not type_filter %}btn-primary{% else %}btn-outline{% endif %} btn-sm">全部紀錄</a>
+  <a href="{% url 'hardware-transactions' %}?type=IN" class="btn {% if type_filter == 'IN' %}btn-primary{% else %}btn-outline{% endif %} btn-sm">進貨入庫</a>
+  <a href="{% url 'hardware-transactions' %}?type=OUT" class="btn {% if type_filter == 'OUT' %}btn-primary{% else %}btn-outline{% endif %} btn-sm">正式出貨</a>
+  <a href="{% url 'hardware-transactions' %}?type=LOAN" class="btn {% if type_filter == 'LOAN' %}btn-primary{% else %}btn-outline{% endif %} btn-sm">客戶借測</a>
+  <a href="{% url 'hardware-transactions' %}?type=RETURN_LOAN" class="btn {% if type_filter == 'RETURN_LOAN' %}btn-primary{% else %}btn-outline{% endif %} btn-sm">借測歸還</a>
+  <a href="{% url 'hardware-transactions' %}?type=RETURN_OUT" class="btn {% if type_filter == 'RETURN_OUT' %}btn-primary{% else %}btn-outline{% endif %} btn-sm">出貨退貨</a>
+  <a href="{% url 'hardware-transactions' %}?type=SCRAP" class="btn {% if type_filter == 'SCRAP' %}btn-primary{% else %}btn-outline{% endif %} btn-sm">設備報廢</a>
+  <a href="{% url 'hardware-list' %}?approval=pending" class="btn btn-outline btn-sm" style="margin-left: auto; color: #d97706; border-color: rgba(217, 119, 6, 0.4);">
+    <i class="fa-solid fa-stamp"></i> 查看待覆核出庫設備 ({{ nav_pending_hardware_count }})
+  </a>
+</div>
+
+<!-- Search -->
+<div class="card" style="padding: 1rem 1.25rem; margin-bottom: 1.25rem;">
+  <form method="get" style="display: flex; gap: 0.75rem; align-items: center;">
+    <div style="flex: 1; position: relative;">
+      <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: var(--text-muted);"></i>
+      <input type="text" name="q" value="{{ query }}" class="form-control" style="padding-left: 2.5rem;" placeholder="搜尋設備序號、客戶代號、客戶名稱或備註...">
+    </div>
+    <button type="submit" class="btn btn-primary"><i class="fa-solid fa-search"></i> 搜尋</button>
+    {% if query or type_filter %}
+      <a href="{% url 'hardware-transactions' %}" class="btn btn-outline">清除</a>
+    {% endif %}
+  </form>
+</div>
+
+<!-- Transactions Table -->
+<div class="card">
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th>發生時間</th>
+          <th>交易類型</th>
+          <th>設備序號</th>
+          <th>型號規格</th>
+          <th>關聯客戶 (代號/名稱)</th>
+          <th>數量</th>
+          <th>經手人員</th>
+          <th>預計歸還日</th>
+          <th>備註</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in page_obj %}
+          <tr>
+            <td>{{ t.occurred_at|date:"Y-m-d H:i" }}</td>
+            <td>
+              {% if t.type == 'IN' %}<span class="badge badge-available">進貨入庫</span>
+              {% elif t.type == 'OUT' %}<span class="badge badge-shipped">正式出貨</span>
+              {% elif t.type == 'LOAN' %}<span class="badge badge-loaned">客戶借測</span>
+              {% elif t.type == 'RETURN_LOAN' %}<span class="badge badge-available">借測歸還</span>
+              {% elif t.type == 'RETURN_OUT' %}<span class="badge badge-repair">出貨退貨</span>
+              {% elif t.type == 'SCRAP' %}<span class="badge badge-scrapped">設備報廢</span>
+              {% endif %}
+            </td>
+            <td>
+              <a href="{% url 'hardware-detail' t.probe.pk %}" style="font-weight: 700; color: var(--primary); text-decoration: none;">
+                {{ t.probe.code }}
+              </a>
+            </td>
+            <td>{{ t.probe.model.name }}</td>
+            <td>
+              {% if t.customer %}
+                {% if can_view_crm %}
+                  <a href="{% url 'customer-detail' t.customer.pk %}" style="color: inherit; text-decoration: none; font-weight: 500;">
+                    <strong style="color: var(--primary);">[{{ t.customer.code }}]</strong> {{ t.customer.name }}
+                  </a>
+                {% else %}
+                  <span style="font-weight: 500;"><strong>[{{ t.customer.code }}]</strong> {{ t.customer.name }}</span>
+                {% endif %}
+              {% else %}
+                <span style="color: var(--text-muted);">-</span>
+              {% endif %}
+            </td>
+            <td>{{ t.quantity }}</td>
+            <td>{{ t.created_by.username|default:"系統" }}</td>
+            <td>{{ t.expected_return_at|date:"Y-m-d"|default:"-" }}</td>
+            <td>{{ t.note|default:"-" }}</td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="9" style="text-align: center; padding: 3rem; color: var(--text-muted);">
+              查無相符的異動紀錄
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if page_obj.has_other_pages %}
+    <div class="pagination-bar">
+      <div>共 <strong>{{ total_count }}</strong> 筆紀錄，顯示第 {{ page_obj.number }} / {{ page_obj.paginator.num_pages }} 頁</div>
+      <div style="display: flex; gap: 0.5rem;">
+        {% if page_obj.has_previous %}
+          <a href="?page={{ page_obj.previous_page_number }}&type={{ type_filter }}&q={{ query }}" class="btn btn-outline btn-sm">&laquo; 上一頁</a>
+        {% endif %}
+        <span class="btn btn-outline btn-sm">{{ page_obj.number }}</span>
+        {% if page_obj.has_next %}
+          <a href="?page={{ page_obj.next_page_number }}&type={{ type_filter }}&q={{ query }}" class="btn btn-outline btn-sm">下一頁 &raquo;</a>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

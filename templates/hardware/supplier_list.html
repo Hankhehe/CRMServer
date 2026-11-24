@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}供應商管理 - CRM Server{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+  <div>
+    <h1 style="font-size: 1.75rem; font-weight: 700; margin-bottom: 0.25rem;">供應商管理</h1>
+    <p style="color: var(--text-muted); font-size: 0.95rem;">維護硬體設備原廠與進貨供應商基本資料</p>
+  </div>
+  {% if can_edit_probe %}
+    <a href="{% url 'hardware-supplier-create' %}" class="btn btn-primary">
+      <i class="fa-solid fa-plus"></i> 新增供應商
+    </a>
+  {% endif %}
+</div>
+
+<div class="card">
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th>供應商代碼</th>
+          <th>廠商名稱</th>
+          <th>聯絡人</th>
+          <th>電話</th>
+          <th>Email</th>
+          <th>地址</th>
+          {% if can_edit_probe %}<th style="text-align: right;">操作</th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in suppliers %}
+          <tr>
+            <td><strong style="font-family: monospace;">{{ s.supplier_code }}</strong></td>
+            <td><strong>{{ s.name }}</strong></td>
+            <td>{{ s.contact|default:"-" }}</td>
+            <td>{{ s.phone|default:"-" }}</td>
+            <td>{{ s.email|default:"-" }}</td>
+            <td>{{ s.address|default:"-" }}</td>
+            {% if can_edit_probe %}
+              <td style="text-align: right; white-space: nowrap;">
+                <a href="{% url 'hardware-supplier-update' s.pk %}" class="btn btn-outline btn-sm">
+                  <i class="fa-solid fa-pen"></i> 編輯
+                </a>
+                <a href="{% url 'hardware-supplier-delete' s.pk %}" class="btn btn-outline btn-sm" style="color: #ef4444; border-color: rgba(239, 68, 68, 0.3);" title="刪除供應商">
+                  <i class="fa-solid fa-trash"></i> 刪除
+                </a>
+              </td>
+            {% endif %}
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="7" style="text-align: center; padding: 3rem; color: var(--text-muted);">
+              尚無供應商資料
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

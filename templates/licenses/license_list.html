@@ -1,0 +1,364 @@
+{% extends "base.html" %}
+
+{% block title %}客戶軟體授權清單 - CRM Server{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 0.75rem;">
+  <div>
+    <h1 style="font-size: 1.75rem; font-weight: 700; margin-bottom: 0.25rem;">客戶軟體授權清單</h1>
+    <p style="color: var(--text-muted); font-size: 0.95rem;">管理客戶採購軟體產品授權書、授權數量、自訂規格與簽核覆核狀態</p>
+  </div>
+  <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+    <a href="{% url 'license-export' %}?{{ request.GET.urlencode }}" class="btn btn-outline" style="display: inline-flex; align-items: center; gap: 0.5rem;">
+      <i class="fa-solid fa-file-excel" style="color: #10b981;"></i> 匯出 Excel
+    </a>
+    {% if can_edit_licenses %}
+      <a href="{% url 'license-create' %}" class="btn btn-primary">
+        <i class="fa-solid fa-plus"></i> 新增授權書
+      </a>
+    {% endif %}
+    <a href="{% url 'product-list' %}" class="btn btn-outline">
+      <i class="fa-solid fa-shapes"></i> 軟體產品主檔
+    </a>
+  </div>
+</div>
+
+<!-- Search & Filter Controls -->
+<div class="card" style="margin-bottom: 1.25rem; padding: 1rem 1.25rem;">
+  <form method="get" style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center;">
+    <div style="flex: 1; min-width: 210px;">
+      <input type="text" name="q" value="{{ query }}" class="form-control" placeholder="搜尋授權書號、客戶名稱、產品代碼..." />
+    </div>
+    <div style="min-width: 155px;">
+      <select name="product" class="form-control">
+        <option value="">-- 所有軟體產品 --</option>
+        {% for p in products %}
+          <option value="{{ p.id }}" {% if product_id == p.id|stringformat:"i" %}selected{% endif %}>{{ p.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div style="min-width: 125px;">
+      <select name="type" class="form-control">
+        <option value="">-- 授權類型 --</option>
+        <option value="perpetual" {% if license_type == "perpetual" %}selected{% endif %}>永久買斷</option>
+        <option value="subscription" {% if license_type == "subscription" %}selected{% endif %}>定期訂閱</option>
+        <option value="trial" {% if license_type == "trial" %}selected{% endif %}>測試授權</option>
+      </select>
+    </div>
+    <div style="min-width: 135px;">
+      <select name="status" class="form-control">
+        <option value="">-- 授權狀態 --</option>
+        <option value="active" {% if status_filter == "active" %}selected{% endif %}>生效中</option>
+        <option value="expired" {% if status_filter == "expired" %}selected{% endif %}>已到期</option>
+        <option value="suspended" {% if status_filter == "suspended" %}selected{% endif %}>已停用</option>
+        <option value="pending" {% if status_filter == "pending" %}selected{% endif %}>待生效</option>
+        <option value="approval_pending" {% if status_filter == "approval_pending" %}selected{% endif %}>簽核：待覆核</option>
+        <option value="approval_rejected" {% if status_filter == "approval_rejected" %}selected{% endif %}>簽核：已退回</option>
+      </select>
+    </div>
+    <div style="min-width: 135px;">
+      <select name="approval" class="form-control">
+        <option value="">-- 覆核篩選 --</option>
+        <option value="pending" {% if approval_filter == "pending" %}selected{% endif %}>待覆核 ({{ pending_approval_count }})</option>
+        <option value="rejected" {% if approval_filter == "rejected" %}selected{% endif %}>已退回 ({{ rejected_approval_count }})</option>
+        <option value="approved" {% if approval_filter == "approved" %}selected{% endif %}>已核准</option>
+      </select>
+    </div>
+    <button type="submit" class="btn btn-primary btn-sm">
+      <i class="fa-solid fa-magnifying-glass"></i> 篩選
+    </button>
+    {% if query or product_id or status_filter or approval_filter or license_type or expiring %}
+      <a href="{% url 'license-list' %}" class="btn btn-outline btn-sm">清除重設</a>
+    {% endif %}
+  </form>
+
+  <!-- Quick Filter Pills -->
+  <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.85rem; padding-top: 0.75rem; border-top: 1px dashed var(--glass-border); align-items: center;">
+    <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">快速篩選：</span>
+    <a href="{% url 'license-list' %}?approval={% if approval_filter == 'pending' %}{% else %}pending{% endif %}"
+       class="btn {% if approval_filter == 'pending' %}btn-primary{% else %}btn-outline{% endif %} btn-sm"
+       style="{% if approval_filter != 'pending' %}color: #d97706; border-color: rgba(217, 119, 6, 0.4);{% endif %}">
+      <i class="fa-solid fa-stamp"></i> 待覆核授權書 ({{ pending_approval_count }})
+    </a>
+    {% if rejected_approval_count > 0 or approval_filter == 'rejected' %}
+      <a href="{% url 'license-list' %}?approval={% if approval_filter == 'rejected' %}{% else %}rejected{% endif %}"
+         class="btn {% if approval_filter == 'rejected' %}btn-danger{% else %}btn-outline{% endif %} btn-sm"
+         style="{% if approval_filter != 'rejected' %}color: #dc2626; border-color: rgba(220, 38, 38, 0.4);{% endif %}">
+        <i class="fa-solid fa-rotate-left"></i> 已退回待修正 ({{ rejected_approval_count }})
+      </a>
+    {% endif %}
+    <a href="{% url 'license-list' %}?expiring={% if expiring == '1' %}0{% else %}1{% endif %}"
+       class="btn {% if expiring == '1' %}btn-primary{% else %}btn-outline{% endif %} btn-sm"
+       style="{% if expiring != '1' %}color: #b45309; border-color: rgba(245, 158, 11, 0.4);{% endif %} margin-left: auto;">
+      <i class="fa-solid fa-triangle-exclamation"></i> 30 天內即將到期
+    </a>
+  </div>
+</div>
+
+<!-- Batch Approve Form (hidden inputs appended via JS) -->
+{% if can_approve_licenses %}
+<form id="batchApproveLicenseForm" method="post" action="{% url 'license-batch-approve' %}" style="display:none;">
+  {% csrf_token %}
+  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+  <div id="batchSelectedInputs"></div>
+</form>
+{% endif %}
+
+<!-- Licenses Table -->
+<div class="card">
+  <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+    <div class="card-title">
+      <i class="fa-solid fa-certificate"></i> 授權書列表 (共 {{ total_count }} 筆)
+    </div>
+    {% if can_approve_licenses %}
+      <div id="batchApproveToolbar" style="display: none; align-items: center; gap: 0.5rem;">
+        <span style="font-size: 0.85rem; color: var(--text-muted);">已選取 <strong id="selectedLicCount">0</strong> 筆待覆核單</span>
+        <button type="button" class="btn btn-primary btn-sm" onclick="submitBatchLicenseApprove()">
+          <i class="fa-solid fa-check-double"></i> 批次核准通過
+        </button>
+      </div>
+    {% endif %}
+  </div>
+  {% if page_obj %}
+    <div class="table-responsive">
+      <table>
+        <thead>
+          <tr>
+            {% if can_approve_licenses %}
+              <th style="width: 36px; text-align: center;">
+                <input type="checkbox" id="selectAllPendingLic" title="全選本頁待覆核項目" style="cursor: pointer;">
+              </th>
+            {% endif %}
+            <th>授權書號</th>
+            <th>採購客戶</th>
+            <th>授權產品</th>
+            <th>授權類型</th>
+            <th>採購數量</th>
+            <th>自訂規格</th>
+            <th>授權期限</th>
+            <th>狀態 / 覆核</th>
+            <th style="text-align: right;">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for lic in page_obj %}
+            <tr style="{% if lic.approval_status == 'pending' %}background: rgba(245, 158, 11, 0.04);{% elif lic.approval_status == 'rejected' %}background: rgba(239, 68, 68, 0.04);{% endif %}">
+              {% if can_approve_licenses %}
+                <td style="text-align: center;">
+                  {% if lic.approval_status == 'pending' %}
+                    <input type="checkbox" class="lic-approve-cb" value="{{ lic.pk }}" style="cursor: pointer;">
+                  {% endif %}
+                </td>
+              {% endif %}
+              <td>
+                <a href="{% url 'license-detail' lic.pk %}" style="font-weight: 700; color: var(--primary); text-decoration: none;">
+                  {{ lic.license_no }}
+                </a>
+                {% if lic.created_by %}
+                  <div style="font-size: 0.72rem; color: var(--text-muted);">開單: {{ lic.created_by.username }}</div>
+                {% endif %}
+              </td>
+              <td>
+                <a href="{% url 'customer-detail' lic.customer.pk %}" style="font-weight: 600; text-decoration: none; color: var(--text-main);">
+                  [{{ lic.customer.code }}] {{ lic.customer.name }}
+                </a>
+              </td>
+              <td>
+                <span style="font-weight: 600;">{{ lic.product.name }}</span>
+                <div style="font-size: 0.75rem; color: var(--text-muted); font-family: monospace;">{{ lic.product.code }}</div>
+              </td>
+              <td>
+                {% if lic.is_perpetual or lic.license_type == 'perpetual' %}
+                  <span class="badge badge-available">永久買斷</span>
+                {% elif lic.license_type == 'subscription' %}
+                  <span class="badge badge-loaned">定期訂閱</span>
+                {% else %}
+                  <span class="badge badge-secondary">{{ lic.get_license_type_display }}</span>
+                {% endif %}
+              </td>
+              <td>
+                <strong>{{ lic.quantity }}</strong> {{ lic.unit }}
+              </td>
+              <td>
+                {% with specs=lic.list_custom_specs %}
+                  {% if specs %}
+                    <div style="display: flex; flex-wrap: wrap; gap: 4px; max-width: 240px;">
+                      {% for s in specs %}
+                        <span class="badge badge-secondary" style="font-size: 0.7rem; padding: 2px 6px;">{{ s.label }}: {{ s.value }}</span>
+                      {% endfor %}
+                    </div>
+                  {% else %}
+                    <span style="color: var(--text-muted); font-size: 0.8rem;">-</span>
+                  {% endif %}
+                {% endwith %}
+              </td>
+              <td>
+                {% if lic.is_perpetual or lic.license_type == 'perpetual' %}
+                  <span style="color: #059669; font-weight: 600;"><i class="fa-solid fa-infinity"></i> 永久</span>
+                {% elif lic.end_date %}
+                  {{ lic.end_date|date:"Y-m-d" }}
+                  <div style="font-size: 0.75rem; color: var(--text-muted);">
+                    {% if lic.days_remaining < 0 %}逾期 {{ lic.days_remaining|stringformat:"+d"|slice:"1:" }} 天
+                    {% else %}剩餘 {{ lic.days_remaining }} 天
+                    {% endif %}
+                  </div>
+                {% else %}
+                  -
+                {% endif %}
+              </td>
+              <td>
+                <span class="badge {{ lic.badge_class }}">{{ lic.status_display }}</span>
+                {% if lic.approval_status == 'rejected' and lic.rejection_reason %}
+                  <div style="font-size: 0.72rem; color: #dc2626; max-width: 180px; margin-top: 3px;" title="{{ lic.rejection_reason }}">
+                    原因: {{ lic.rejection_reason|truncatechars:24 }}
+                  </div>
+                {% endif %}
+              </td>
+              <td style="text-align: right; white-space: nowrap;">
+                {% if can_approve_licenses and lic.approval_status == 'pending' %}
+                  <form method="post" action="{% url 'license-approve' lic.pk %}" style="display:inline;" onsubmit="return confirm('確定核准軟體授權書「{{ lic.license_no }}」正式生效嗎？');">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <button type="submit" class="btn btn-primary btn-sm" title="核准通過" style="background: #059669; border-color: #059669;">
+                      <i class="fa-solid fa-check"></i> 核准
+                    </button>
+                  </form>
+                  <button type="button" class="btn btn-danger btn-sm" title="退回修正" onclick="openRejectLicenseModal('{% url 'license-reject' lic.pk %}', '{{ lic.license_no|escapejs }}')">
+                    <i class="fa-solid fa-xmark"></i> 退回
+                  </button>
+                {% endif %}
+
+                {% if lic.approval_status == 'approved' %}
+                  <button type="button" class="btn btn-outline btn-sm" data-cert-export="license" data-cert-id="{{ lic.pk }}" title="匯出軟體授權證書圖檔" style="color: #4d7c0f; border-color: rgba(101, 163, 13, 0.35);">
+                    <i class="fa-solid fa-award"></i>
+                  </button>
+                {% else %}
+                  <button type="button" class="btn btn-outline btn-sm" disabled title="尚未覆核通過，無法匯出正式證書" style="opacity: 0.4; cursor: not-allowed;">
+                    <i class="fa-solid fa-award"></i>
+                  </button>
+                {% endif %}
+
+                <a href="{% url 'license-detail' lic.pk %}" class="btn btn-outline btn-sm" title="詳情">
+                  <i class="fa-solid fa-eye"></i>
+                </a>
+                {% if can_edit_licenses %}
+                  <a href="{% url 'license-update' lic.pk %}" class="btn btn-outline btn-sm" title="編輯">
+                    <i class="fa-solid fa-pen"></i>
+                  </a>
+                  <a href="{% url 'license-delete' lic.pk %}" class="btn btn-danger btn-sm" title="刪除">
+                    <i class="fa-solid fa-trash"></i>
+                  </a>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+      <div class="pagination-bar">
+        <div>
+          顯示第 {{ page_obj.start_index }} 到 {{ page_obj.end_index }} 筆，共 {{ total_count }} 筆
+        </div>
+        <div style="display: flex; gap: 0.35rem;">
+          {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query }}{% endif %}{% if product_id %}&product={{ product_id }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if approval_filter %}&approval={{ approval_filter }}{% endif %}{% if license_type %}&type={{ license_type }}{% endif %}{% if expiring %}&expiring={{ expiring }}{% endif %}" class="btn btn-outline btn-sm">上一頁</a>
+          {% endif %}
+          <span class="btn btn-primary btn-sm">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+          {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query }}{% endif %}{% if product_id %}&product={{ product_id }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if approval_filter %}&approval={{ approval_filter }}{% endif %}{% if license_type %}&type={{ license_type }}{% endif %}{% if expiring %}&expiring={{ expiring }}{% endif %}" class="btn btn-outline btn-sm">下一頁</a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  {% else %}
+    <div style="padding: 3rem; text-align: center; color: var(--text-muted);">
+      <i class="fa-solid fa-certificate" style="font-size: 2.5rem; opacity: 0.3; margin-bottom: 0.75rem;"></i>
+      <p>目前尚無符合篩選條件的軟體授權書資料</p>
+      {% if can_edit_licenses %}
+        <a href="{% url 'license-create' %}" class="btn btn-primary btn-sm" style="margin-top: 0.5rem;">
+          <i class="fa-solid fa-plus"></i> 新增軟體授權書
+        </a>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>
+
+{% if can_approve_licenses %}
+<!-- Reject Modal -->
+<div id="rejectLicenseModal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.55); z-index:9999; align-items:center; justify-content:center; padding:1rem;">
+  <div class="card" style="width:100%; max-width:480px; margin:0;">
+    <h3 style="font-size:1.15rem; font-weight:700; margin-bottom:0.5rem; color:#dc2626;">
+      <i class="fa-solid fa-rotate-left"></i> 退回軟體授權書：<span id="rejectLicenseNoDisplay"></span>
+    </h3>
+    <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem;">
+      請填寫退回原因，系統將把此單據標記為「已退回」並寄信通知原開單人員修改後重新送審：
+    </p>
+    <form id="rejectLicenseForm" method="post" action="">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+      <div class="form-group">
+        <label>退回原因說明 <span style="color:#dc2626;">*</span></label>
+        <textarea name="rejection_reason" class="form-control" rows="3" required placeholder="例如：授權數量與報價單不符、到期日填寫有誤..."></textarea>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:1rem;">
+        <button type="button" class="btn btn-outline btn-sm" onclick="closeRejectLicenseModal()">取消</button>
+        <button type="submit" class="btn btn-danger btn-sm"><i class="fa-solid fa-paper-plane"></i> 確認退回</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  function openRejectLicenseModal(actionUrl, licNo) {
+    document.getElementById('rejectLicenseForm').action = actionUrl;
+    document.getElementById('rejectLicenseNoDisplay').textContent = licNo;
+    document.getElementById('rejectLicenseModal').style.display = 'flex';
+  }
+  function closeRejectLicenseModal() {
+    document.getElementById('rejectLicenseModal').style.display = 'none';
+  }
+
+  (function() {
+    const selectAll = document.getElementById('selectAllPendingLic');
+    const cbs = Array.from(document.querySelectorAll('.lic-approve-cb'));
+    const toolbar = document.getElementById('batchApproveToolbar');
+    const countEl = document.getElementById('selectedLicCount');
+
+    function syncToolbar() {
+      const checked = cbs.filter(c => c.checked);
+      if (toolbar && countEl) {
+        countEl.textContent = checked.length;
+        toolbar.style.display = checked.length > 0 ? 'flex' : 'none';
+      }
+    }
+
+    if (selectAll) {
+      selectAll.addEventListener('change', function() {
+        cbs.forEach(c => { c.checked = selectAll.checked; });
+        syncToolbar();
+      });
+    }
+    cbs.forEach(c => c.addEventListener('change', syncToolbar));
+  })();
+
+  function submitBatchLicenseApprove() {
+    const checked = Array.from(document.querySelectorAll('.lic-approve-cb:checked'));
+    if (!checked.length) return;
+    if (!confirm(`確定要批次核准這 ${checked.length} 筆軟體授權書嗎？`)) return;
+    const container = document.getElementById('batchSelectedInputs');
+    container.innerHTML = '';
+    checked.forEach(c => {
+      const inp = document.createElement('input');
+      inp.type = 'hidden';
+      inp.name = 'selected_ids';
+      inp.value = c.value;
+      container.appendChild(inp);
+    });
+    document.getElementById('batchApproveLicenseForm').submit();
+  }
+</script>
+{% endif %}
+{% endblock %}

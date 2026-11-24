@@ -1,0 +1,1881 @@
+{% extends "base.html" %}
+
+{% block title %}{{ customer.name }} ({{ customer.code }}) - 客戶詳情{% endblock %}
+
+{% block content %}
+<style>
+  .collapsible-card {
+    transition: all 0.2s ease;
+  }
+  .collapsible-card .card-header.collapsible-header {
+    cursor: pointer;
+    user-select: none;
+    transition: margin-bottom 0.2s ease, padding-bottom 0.2s ease;
+  }
+  .collapsible-card .card-header.collapsible-header:hover .card-title {
+    color: var(--primary);
+  }
+  .card-collapse-btn {
+    background: white;
+    border: 1px solid var(--glass-border);
+    color: var(--text-muted);
+    width: 30px;
+    height: 30px;
+    border-radius: 7px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 0.8rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    padding: 0;
+    flex-shrink: 0;
+  }
+  .card-collapse-btn:hover {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+    color: var(--primary);
+    transform: translateY(-1px);
+  }
+  .card-collapse-btn i {
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  /* Collapsed state */
+  .collapsible-card.is-collapsed {
+    padding-bottom: 1.25rem;
+  }
+  .collapsible-card.is-collapsed .card-header.collapsible-header {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+  .collapsible-card.is-collapsed .card-body {
+    display: none;
+  }
+  .collapsible-card.is-collapsed .card-collapse-btn i {
+    transform: rotate(180deg);
+  }
+
+  /* Customer Hierarchy Tree Styles */
+  .hierarchy-tree-root,
+  .hierarchy-tree-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .hierarchy-tree-list {
+    padding-left: 1.85rem;
+    position: relative;
+  }
+  .hierarchy-tree-list::before {
+    content: "";
+    position: absolute;
+    left: 0.75rem;
+    top: 0;
+    bottom: 1.25rem;
+    width: 2px;
+    background: #cbd5e1;
+  }
+  .hierarchy-tree-item {
+    position: relative;
+    padding-top: 0.65rem;
+  }
+  .hierarchy-tree-root > .hierarchy-tree-item {
+    padding-top: 0;
+  }
+  .hierarchy-tree-list > .hierarchy-tree-item::before {
+    content: "";
+    position: absolute;
+    left: -1.1rem;
+    top: 1.65rem;
+    width: 1.1rem;
+    height: 2px;
+    background: #cbd5e1;
+  }
+  .hierarchy-tree-list > .hierarchy-tree-item:last-child::after {
+    content: "";
+    position: absolute;
+    left: -1.12rem;
+    top: 1.75rem;
+    bottom: 0;
+    width: 4px;
+    background: #ffffff;
+  }
+  .hierarchy-node-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 0.7rem 1rem;
+    transition: all 0.18s ease;
+  }
+  .hierarchy-node-card:hover {
+    border-color: #cbd5e1;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.05);
+  }
+  .hierarchy-node-card.is-current-node {
+    background: rgba(79, 70, 229, 0.06);
+    border: 2px solid var(--primary);
+    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.1);
+  }
+  .hierarchy-node-card.is-ancestor-node {
+    background: #ffffff;
+    border-style: dashed;
+    border-color: #94a3b8;
+  }
+  .hierarchy-node-card.is-locked-node {
+    opacity: 0.78;
+    background: #f1f5f9;
+  }
+  .hierarchy-node-title-link {
+    font-weight: 700;
+    font-size: 0.96rem;
+    color: var(--text-main);
+    text-decoration: none;
+    transition: color 0.15s ease;
+  }
+  .hierarchy-node-title-link:hover {
+    color: var(--primary);
+    text-decoration: underline;
+  }
+  .hierarchy-stat-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.76rem;
+    color: var(--text-main);
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 2px 8px;
+  }
+</style>
+
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+  <div style="display: flex; align-items: center; gap: 1rem;">
+    <a href="{% url 'customer-list' %}" class="btn btn-outline btn-sm">
+      <i class="fa-solid fa-arrow-left"></i> 回列表
+    </a>
+    <div>
+      <h1 style="font-size: 1.75rem; font-weight: 700; margin-bottom: 0.15rem;">{{ customer.name }}</h1>
+      <span style="font-family: monospace; font-size: 0.95rem; font-weight: 700; color: var(--primary);">
+        代號: {{ customer.code }}
+      </span>
+      {% if customer.tax_id %}
+        <span style="color: var(--text-muted); font-size: 0.85rem; margin-left: 0.75rem;">(統編: {{ customer.tax_id }})</span>
+      {% endif %}
+    </div>
+  </div>
+  <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+    <!-- 關注 / 取消關注按鈕 -->
+    {% if not is_followed_only_scope %}
+    <form method="post" action="{% url 'customer-follow-toggle' customer.pk %}" style="display: inline;">
+      {% csrf_token %}
+      {% if is_following %}
+        <button type="submit" class="btn btn-outline btn-sm" style="background: rgba(245, 158, 11, 0.14); border-color: #f59e0b; color: #b45309;" title="點擊取消關注此客戶">
+          <i class="fa-solid fa-star" style="color: #f59e0b;"></i> 已關注
+        </button>
+      {% else %}
+        <button type="submit" class="btn btn-outline btn-sm" title="點擊關注此客戶，有資料變更或新留言時接收通知">
+          <i class="fa-regular fa-star"></i> 關注客戶
+        </button>
+      {% endif %}
+    </form>
+    {% else %}
+      <span class="btn btn-outline btn-sm" style="background: rgba(245, 158, 11, 0.14); border-color: #f59e0b; color: #b45309; cursor: default;" title="您負責的客戶範圍">
+        <i class="fa-solid fa-star" style="color: #f59e0b;"></i> 已關注 (負責範圍)
+      </span>
+    {% endif %}
+
+    <!-- 查看關注名單按鈕 -->
+    <button type="button" class="btn btn-outline btn-sm" onclick="openFollowersModal()" title="查看關注此客戶的同仁名單">
+      <i class="fa-solid fa-users" style="color: var(--primary);"></i> 關注名單 ({{ followers_count }})
+    </button>
+
+    <button type="button" class="btn btn-outline btn-sm" id="btn-toggle-all-cards" onclick="toggleAllCards()" title="全部收合或全部展開">
+      <i class="fa-solid fa-angles-up" id="toggle-all-icon"></i> <span id="toggle-all-text">全部收合</span>
+    </button>
+    {% if can_edit_customers %}
+      <a href="{% url 'customer-update' customer.pk %}" class="btn btn-primary">
+        <i class="fa-solid fa-pen-to-square"></i> 編輯客戶資料
+      </a>
+      <a href="{% url 'customer-delete' customer.pk %}" class="btn btn-danger btn-sm">
+        <i class="fa-solid fa-trash"></i> 刪除
+      </a>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Customer Basic Info Card -->
+<div class="card collapsible-card" id="card-basic-info">
+  <div class="card-header collapsible-header">
+    <div class="card-title">
+      <i class="fa-solid fa-building"></i> 基本資料
+    </div>
+    <div style="display: flex; align-items: center; gap: 0.75rem;">
+      <span class="badge {{ customer.contract_badge_class }}">
+        {{ customer.contract_status_display }}
+      </span>
+      <button type="button" class="card-collapse-btn" aria-label="收合/展開" title="收合/展開" aria-expanded="true">
+        <i class="fa-solid fa-chevron-up"></i>
+      </button>
+    </div>
+  </div>
+  <div class="card-body">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.25rem;">
+      <div>
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;">客戶代號 / 統編</div>
+        <div style="font-weight: 600; font-family: monospace;">{{ customer.code }}</div>
+      </div>
+      <div>
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;">公司統一編號</div>
+        <div style="font-weight: 600;">{{ customer.tax_id|default:"未填寫" }}</div>
+      </div>
+      <div>
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;">上層客戶 / 經銷代理商</div>
+        <div style="font-weight: 600;">
+          {% if customer.parent %}
+            {% if parent_can_access %}
+              <a href="{% url 'customer-detail' customer.parent.pk %}" style="color: var(--primary); text-decoration: none; display: inline-flex; align-items: center; gap: 0.35rem;">
+                <i class="fa-solid fa-level-up-alt"></i>
+                <span>[{{ customer.parent.code }}] {{ customer.parent.name }}</span>
+              </a>
+            {% else %}
+              <span style="color: var(--text-muted); display: inline-flex; align-items: center; gap: 0.35rem;" title="未關注之上層客戶（無檢視權限）">
+                <i class="fa-solid fa-lock"></i>
+                <span>[{{ customer.parent.code }}] {{ customer.parent.name }}</span>
+              </span>
+            {% endif %}
+          {% else %}
+            <span style="color: var(--text-muted); font-weight: 500;">無 (獨立客戶 / 最頂層)</span>
+          {% endif %}
+        </div>
+      </div>
+      <div>
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;">主要電話</div>
+        <div style="font-weight: 600;">{{ customer.phone|default:"未填寫" }}</div>
+      </div>
+      <div>
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;">主要電子郵件</div>
+        <div style="font-weight: 600;">{{ customer.email|default:"未填寫" }}</div>
+      </div>
+      <div style="grid-column: 1 / -1;">
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;">營業或聯絡地址</div>
+        <div style="font-weight: 600;">{{ customer.address|default:"未填寫" }}</div>
+      </div>
+      {% if customer.custom_specs_display %}
+        {% for item in customer.custom_specs_display %}
+          <div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;">{{ item.label }}</div>
+            <div style="font-weight: 600;">{{ item.value|default:"未填寫" }}</div>
+          </div>
+        {% endfor %}
+      {% endif %}
+      {% if customer.note %}
+        <div style="grid-column: 1 / -1; background: #f8fafc; padding: 0.75rem 1rem; border-radius: 8px;">
+          <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;">備註說明</div>
+          <div style="font-size: 0.9rem;">{{ customer.note }}</div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Customer Hierarchy / Relationship Chain Card -->
+<div class="card collapsible-card" id="card-hierarchy">
+  <div class="card-header collapsible-header">
+    <div class="card-title" style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+      <i class="fa-solid fa-diagram-project" style="color: var(--primary);"></i>
+      <span>客戶關係鍊 / 通路階層</span>
+      {% if ancestors_count > 0 %}
+        <span class="badge badge-secondary" style="font-size: 0.72rem;">往上追溯 {{ ancestors_count }} 層</span>
+      {% endif %}
+      <span class="badge badge-shipped" style="font-size: 0.72rem;">直屬下層 {{ direct_children_count }} 家 / 總下轄 {{ total_descendants_count }} 家</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+      {% if can_edit_customers %}
+        <a href="{% url 'customer-create' %}?parent={{ customer.pk }}" class="btn btn-outline btn-sm" title="建立新客戶並自動掛載於此客戶底下">
+          <i class="fa-solid fa-user-plus"></i> 新增下層客戶
+        </a>
+        <button type="button" class="btn btn-primary btn-sm" onclick="openBindChildModal()" title="選擇系統內既有客戶掛載為此客戶的下層">
+          <i class="fa-solid fa-link"></i> 綁定既有客戶為下層
+        </button>
+      {% endif %}
+      <button type="button" class="card-collapse-btn" aria-label="收合/展開" title="收合/展開" aria-expanded="true">
+        <i class="fa-solid fa-chevron-up"></i>
+      </button>
+    </div>
+  </div>
+  <div class="card-body">
+    {% if ancestors_nodes %}
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.6rem 0.95rem; margin-bottom: 1rem; font-size: 0.85rem; display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap;">
+        <span style="color: var(--text-muted); font-weight: 600;"><i class="fa-solid fa-route" style="color: var(--primary); margin-right: 4px;"></i> 上層通路路徑：</span>
+        {% for anc in ancestors_nodes %}
+          {% if anc.can_access %}
+            <a href="{% url 'customer-detail' anc.id %}" style="font-weight: 600; color: var(--primary); text-decoration: none;">[{{ anc.code }}] {{ anc.name }}</a>
+          {% else %}
+            <span style="color: var(--text-muted); font-weight: 600;" title="未關注客戶">[{{ anc.code }}] {{ anc.name }} <i class="fa-solid fa-lock" style="font-size: 0.7rem;"></i></span>
+          {% endif %}
+          <i class="fa-solid fa-chevron-right" style="font-size: 0.7rem; color: #94a3b8;"></i>
+        {% endfor %}
+        <span style="font-weight: 700; color: var(--text-main); background: rgba(79, 70, 229, 0.1); padding: 1px 8px; border-radius: 5px;">[{{ customer.code }}] {{ customer.name }} (目前客戶)</span>
+      </div>
+    {% endif %}
+
+    {% if has_hierarchy %}
+      <ul class="hierarchy-tree-root">
+        {% include "customers/partials/hierarchy_tree_node.html" with node=hierarchy_root %}
+      </ul>
+    {% else %}
+      <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 10px; padding: 1.5rem; text-align: center; color: var(--text-muted);">
+        <i class="fa-solid fa-diagram-project" style="font-size: 1.65rem; color: #94a3b8; margin-bottom: 0.45rem; display: block;"></i>
+        <div style="font-weight: 600; color: var(--text-main); margin-bottom: 0.2rem;">此客戶目前為獨立客戶（無上層代理/經銷商，亦尚無下轄客戶）</div>
+        <div style="font-size: 0.85rem;">
+          若此客戶有下游客戶，可點擊右上角「<strong>新增下層客戶</strong>」或「<strong>綁定既有客戶為下層</strong>」；若此客戶隸屬於某經銷商/代理商，可點擊「<strong>編輯客戶資料</strong>」設定上層客戶。
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Customer Custom Info & Environment Sections Card -->
+<div class="card collapsible-card" id="info-sections-panel">
+  <div class="card-header collapsible-header">
+    <div class="card-title">
+      <i class="fa-solid fa-sitemap" style="color: var(--primary);"></i>
+      客戶環境架構與自訂資訊區塊 ({{ info_sections.count }})
+    </div>
+    <div style="display: flex; align-items: center; gap: 0.75rem;">
+      {% if can_edit_customers %}
+        <button type="button" class="btn btn-primary btn-sm" onclick="openAddInfoSectionModal()">
+          <i class="fa-solid fa-plus"></i> 新增自訂區塊
+        </button>
+      {% endif %}
+      <button type="button" class="card-collapse-btn" aria-label="收合/展開" title="收合/展開" aria-expanded="true">
+        <i class="fa-solid fa-chevron-up"></i>
+      </button>
+    </div>
+  </div>
+  <div class="card-body">
+    <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: -0.5rem; margin-bottom: 1rem;">
+      可自由建立並命名結構化區塊（例如：客戶網路與系統環境架構、主機 IP 規劃、VPN/遠端連線資訊、進場規範），與下方時間軸流水帳獨立分開顯示，方便隨時查閱現況。
+    </p>
+
+    {% if info_sections %}
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 1.25rem;">
+        {% for sec in info_sections %}
+          <div class="info-section-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1.15rem; display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+              <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; margin-bottom: 0.65rem; padding-bottom: 0.5rem; border-bottom: 1px solid #e2e8f0;">
+                <div style="font-weight: 700; font-size: 1.05rem; color: var(--primary); display: flex; align-items: center; gap: 0.45rem;">
+                  <i class="fa-solid fa-layer-group" style="font-size: 0.9rem;"></i>
+                  <span>{{ sec.title }}</span>
+                </div>
+                {% if can_edit_customers %}
+                  <div style="display: inline-flex; gap: 0.35rem; flex-shrink: 0;">
+                    <button type="button" class="btn btn-outline btn-sm" style="padding: 0.2rem 0.5rem; font-size: 0.75rem;" title="編輯區塊"
+                            onclick="openEditInfoSectionModal('{{ sec.pk }}', '{{ sec.title|escapejs }}', '{{ sec.sort_order }}', '{{ sec.content|escapejs }}')">
+                      <i class="fa-solid fa-pen"></i>
+                    </button>
+                    <form method="post" action="{% url 'info-section-delete' sec.pk %}" style="display: inline;" onsubmit="return confirm('確定要刪除區塊「{{ sec.title|escapejs }}」嗎？');">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-outline btn-sm" style="padding: 0.2rem 0.5rem; font-size: 0.75rem; color: #ef4444;" title="刪除區塊">
+                        <i class="fa-solid fa-trash"></i>
+                      </button>
+                    </form>
+                  </div>
+                {% endif %}
+              </div>
+              <div class="info-sec-body" style="position: relative;">
+                <div class="info-sec-content" style="font-size: 0.9rem; line-height: 1.65; color: var(--text-main); white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow: hidden; transition: max-height 0.25s ease;">{{ sec.content }}</div>
+                <div class="info-sec-fade" style="display: none; position: absolute; bottom: 0; left: 0; right: 0; height: 50px; background: linear-gradient(to bottom, rgba(248, 250, 252, 0), rgba(248, 250, 252, 1)); pointer-events: none;"></div>
+              </div>
+              <div class="info-sec-toggle-bar" style="display: none; text-align: center; margin-top: 0.5rem;">
+                <button type="button" class="btn btn-outline btn-sm info-sec-toggle-btn" style="padding: 0.2rem 0.75rem; font-size: 0.75rem; border-radius: 20px; color: var(--primary); border-color: rgba(79, 70, 229, 0.3); background: white;">
+                  <i class="fa-solid fa-chevron-down"></i> 顯示全部 (Show all)
+                </button>
+              </div>
+            </div>
+            <div style="margin-top: 0.85rem; padding-top: 0.5rem; border-top: 1px dashed #e2e8f0; display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted);">
+              <span>排序: {{ sec.sort_order }}</span>
+              <span>最後更新: {{ sec.updated_at|date:"Y-m-d H:i" }}{% if sec.updated_by %} ({{ sec.updated_by.username }}){% endif %}</span>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 10px; padding: 1.75rem; text-align: center; color: var(--text-muted);">
+        <i class="fa-solid fa-server" style="font-size: 1.75rem; color: #94a3b8; margin-bottom: 0.5rem; display: block;"></i>
+        <div style="font-weight: 600; color: var(--text-main); margin-bottom: 0.2rem;">尚未建立客戶環境或自訂資訊區塊</div>
+        <div style="font-size: 0.85rem;">點擊右上角「新增自訂區塊」即可建立如「系統環境架構」、「IP 與拓樸資訊」等結構化筆記。</div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Contacts & Contracts Grid -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 1.5rem; margin-bottom: 1.5rem; align-items: start;">
+  <!-- Contacts Panel -->
+  <div class="card collapsible-card" id="card-contacts" style="margin-bottom: 0;">
+    <div class="card-header collapsible-header">
+      <div class="card-title">
+        <i class="fa-solid fa-address-book"></i> 聯絡窗口名冊 ({{ contacts.count }})
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        {% if can_edit_customers %}
+          <a href="{% url 'contact-create' customer.pk %}" class="btn btn-outline btn-sm">
+            <i class="fa-solid fa-plus"></i> 新增窗口
+          </a>
+        {% endif %}
+        <button type="button" class="card-collapse-btn" aria-label="收合/展開" title="收合/展開" aria-expanded="true">
+          <i class="fa-solid fa-chevron-up"></i>
+        </button>
+      </div>
+    </div>
+    <div class="card-body">
+      {% if contacts %}
+        <div class="table-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th>姓名</th>
+                <th>職稱/部門</th>
+                <th>電話/手機</th>
+                <th>Email</th>
+                {% if can_edit_customers %}<th>操作</th>{% endif %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for c in contacts %}
+                <tr>
+                  <td>
+                    <strong>{{ c.name }}</strong>
+                    {% if c.is_primary %}
+                      <span class="badge badge-available" style="margin-left: 4px; font-size: 0.7rem;">主要</span>
+                    {% endif %}
+                  </td>
+                  <td>{{ c.title|default:"-" }}</td>
+                  <td>{{ c.phone|default:"-" }}</td>
+                  <td>{{ c.email|default:"-" }}</td>
+                  {% if can_edit_customers %}
+                    <td style="text-align: right;">
+                      <a href="{% url 'contact-update' c.pk %}" class="btn btn-outline btn-sm" title="編輯">
+                        <i class="fa-solid fa-pen"></i>
+                      </a>
+                      <a href="{% url 'contact-delete' c.pk %}" class="btn btn-danger btn-sm" title="刪除">
+                        <i class="fa-solid fa-trash"></i>
+                      </a>
+                    </td>
+                  {% endif %}
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div style="padding: 2rem; text-align: center; color: var(--text-muted);">
+          尚無聯絡窗口資料
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Contracts Panel -->
+  <div class="card collapsible-card" id="card-contracts" style="margin-bottom: 0;">
+    <div class="card-header collapsible-header">
+      <div class="card-title">
+        <i class="fa-solid fa-file-contract"></i> 維護合約歷程 <span id="contracts-counter" style="font-size: 0.9rem; font-weight: 500; color: var(--text-muted);"></span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        {% if contracts %}
+          <label style="display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.85rem; cursor: pointer; user-select: none; margin: 0; color: var(--text-secondary, #475569); font-weight: normal;" onclick="event.stopPropagation();" title="勾選後顯示所有已到期及終止的歷史合約">
+            <input type="checkbox" id="toggle-all-contracts" style="cursor: pointer; width: 15px; height: 15px;">
+            <span>顯示全部</span>
+          </label>
+        {% endif %}
+        {% if can_edit_licenses %}
+          <a href="{% url 'customer-contract-create' customer.pk %}" class="btn btn-outline btn-sm">
+            <i class="fa-solid fa-plus"></i> 新增合約
+          </a>
+        {% endif %}
+        <button type="button" class="card-collapse-btn" aria-label="收合/展開" title="收合/展開" aria-expanded="true">
+          <i class="fa-solid fa-chevron-up"></i>
+        </button>
+      </div>
+    </div>
+    <div class="card-body">
+      {% if contracts %}
+        <div class="table-responsive" id="contracts-table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>合約編號</th>
+                <th>涵蓋產品與設備</th>
+                <th>有效期間</th>
+                <th>狀態</th>
+                <th>SLA</th>
+                <th style="text-align: right;">操作</th>
+              </tr>
+            </thead>
+            <tbody id="contracts-table-body">
+              {% for ct in contracts %}
+                <tr class="contract-row" data-active="{% if ct.approval_status != 'approved' or ct.dynamic_status == 'active' or ct.dynamic_status == 'pending' %}1{% else %}0{% endif %}">
+                  <td>
+                    <strong>{{ ct.contract_no }}</strong>
+                    {% if ct.name %}<div style="font-size: 0.75rem; color: var(--text-muted);">{{ ct.name }}</div>{% endif %}
+                  </td>
+                  <td>
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                      {% with lic_count=ct.licenses.all|length probe_count=ct.probes.all|length %}
+                        {% if lic_count == 0 and probe_count == 0 %}
+                          <span style="color: var(--text-muted); font-size: 0.8rem;">未指定</span>
+                        {% else %}
+                          {% if lic_count > 0 %}
+                            <span class="badge badge-secondary" style="font-size: 0.75rem; width: fit-content;" title="{% for l in ct.licenses.all %}{{ l.license_no }} ({{ l.product.name }})&#10;{% endfor %}">
+                              <i class="fa-solid fa-certificate" style="color: #3b82f6;"></i> {{ lic_count }} 項授權
+                            </span>
+                          {% endif %}
+                          {% if probe_count > 0 %}
+                            <span class="badge badge-secondary" style="font-size: 0.75rem; width: fit-content;" title="{% for p in ct.probes.all %}{{ p.code }} ({{ p.model.name }})&#10;{% endfor %}">
+                              <i class="fa-solid fa-server" style="color: #10b981;"></i> {{ probe_count }} 台設備
+                            </span>
+                          {% endif %}
+                        {% endif %}
+                      {% endwith %}
+                    </div>
+                  </td>
+                  <td>
+                    {{ ct.start_date|date:"Y-m-d"|default:"-" }} ~ {{ ct.end_date|date:"Y-m-d"|default:"-" }}
+                    {% if ct.end_date and ct.approval_status == 'approved' %}
+                      <div style="font-size: 0.75rem; color: var(--text-muted);">
+                        {% if ct.days_remaining < 0 %}逾期 {{ ct.days_remaining|stringformat:"+d"|slice:"1:" }} 天
+                        {% else %}剩餘 {{ ct.days_remaining }} 天
+                        {% endif %}
+                      </div>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if ct.approval_status == 'pending' %}<span class="badge badge-loaned">待覆核</span>
+                    {% elif ct.approval_status == 'rejected' %}<span class="badge badge-scrapped" title="{{ ct.rejection_reason }}">已退回</span>
+                    {% elif ct.dynamic_status == 'active' %}<span class="badge badge-available">生效中</span>
+                    {% elif ct.dynamic_status == 'expired' %}<span class="badge badge-scrapped">已到期</span>
+                    {% elif ct.dynamic_status == 'pending' %}<span class="badge badge-secondary">待生效</span>
+                    {% elif ct.dynamic_status == 'terminated' %}<span class="badge badge-secondary">已終止</span>
+                    {% endif %}
+                  </td>
+                  <td>{{ ct.sla_level|default:"標準" }}</td>
+                  <td style="text-align: right; white-space: nowrap;">
+                    {% if can_approve_contracts and ct.approval_status == 'pending' %}
+                      <form method="post" action="{% url 'contract-approve' ct.pk %}" style="display:inline;" onsubmit="return confirm('確定核准維護合約「{{ ct.contract_no }}」正式生效嗎？');">
+                        {% csrf_token %}
+                        <input type="hidden" name="next" value="{{ request.get_full_path }}#card-contracts">
+                        <button type="submit" class="btn btn-primary btn-sm" title="核准通過" style="background: #059669; border-color: #059669;">
+                          <i class="fa-solid fa-check"></i>
+                        </button>
+                      </form>
+                    {% endif %}
+                    {% if ct.approval_status == 'approved' %}
+                      <button type="button" class="btn btn-outline btn-sm" data-cert-export="warranty" data-cert-id="{{ ct.pk }}" title="匯出軟體保固證書圖檔" style="color: #4d7c0f; border-color: rgba(101, 163, 13, 0.35);">
+                        <i class="fa-solid fa-award"></i>
+                      </button>
+                    {% else %}
+                      <button type="button" class="btn btn-outline btn-sm" disabled title="尚未覆核通過，無法匯出保固證書" style="opacity: 0.4; cursor: not-allowed;">
+                        <i class="fa-solid fa-award"></i>
+                      </button>
+                    {% endif %}
+                    {% if can_edit_licenses or can_approve_contracts %}
+                      <a href="{% url 'contract-update' ct.pk %}" class="btn btn-outline btn-sm" title="檢視/編輯合約">
+                        <i class="fa-solid fa-pen"></i>
+                      </a>
+                    {% endif %}
+                    {% if can_edit_licenses %}
+                      <a href="{% url 'contract-delete' ct.pk %}" class="btn btn-danger btn-sm" title="刪除合約">
+                        <i class="fa-solid fa-trash"></i>
+                      </a>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div id="contracts-empty-active" style="display: none; padding: 2rem; text-align: center; color: var(--text-muted);">
+          <i class="fa-solid fa-circle-info" style="margin-right: 0.35rem; color: var(--primary);"></i>
+          目前無生效中或待生效合約（共 <span id="contracts-total-msg">0</span> 筆歷史合約），
+          <a href="javascript:void(0);" onclick="const cb = document.getElementById('toggle-all-contracts'); if(cb){cb.checked = true; cb.dispatchEvent(new Event('change'));}" style="color: var(--primary); text-decoration: underline; font-weight: 600;">
+            點此顯示全部
+          </a>
+        </div>
+      {% else %}
+        <div style="padding: 2rem; text-align: center; color: var(--text-muted);">
+          尚無合約紀錄
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Software Licenses Panel -->
+<div class="card collapsible-card" id="card-licenses">
+  <div class="card-header collapsible-header">
+    <div class="card-title">
+      <i class="fa-solid fa-certificate"></i> 採購軟體授權歷程 <span id="licenses-counter" style="font-size: 0.9rem; font-weight: 500; color: var(--text-muted);"></span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 0.75rem;">
+      {% if licenses %}
+        <label style="display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.85rem; cursor: pointer; user-select: none; margin: 0; color: var(--text-secondary, #475569); font-weight: normal;" onclick="event.stopPropagation();" title="勾選後顯示所有已到期及停用的歷史軟體授權">
+          <input type="checkbox" id="toggle-all-licenses" style="cursor: pointer; width: 15px; height: 15px;">
+          <span>顯示全部</span>
+        </label>
+      {% endif %}
+      {% if can_edit_licenses %}
+        <a href="{% url 'license-create' %}?customer={{ customer.pk }}" class="btn btn-outline btn-sm">
+          <i class="fa-solid fa-plus"></i> 新增授權書
+        </a>
+      {% endif %}
+      <button type="button" class="card-collapse-btn" aria-label="收合/展開" title="收合/展開" aria-expanded="true">
+        <i class="fa-solid fa-chevron-up"></i>
+      </button>
+    </div>
+  </div>
+  <div class="card-body">
+    {% if licenses %}
+      <div class="table-responsive" id="licenses-table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>授權書號</th>
+              <th>授權產品</th>
+              <th>授權類型</th>
+              <th>採購數量</th>
+              <th>自訂規格</th>
+              <th>授權期限</th>
+              <th>授權狀態</th>
+              <th>原廠維護狀態</th>
+              <th style="text-align: right;">操作</th>
+            </tr>
+          </thead>
+          <tbody id="licenses-table-body">
+            {% for lic in licenses %}
+              <tr class="license-row" data-active="{% if lic.approval_status != 'approved' or lic.dynamic_status == 'active' or lic.dynamic_status == 'pending' %}1{% else %}0{% endif %}">
+                <td>
+                  <a href="{% url 'license-detail' lic.pk %}" style="font-weight: 700; color: var(--primary); text-decoration: none;">
+                    {{ lic.license_no }}
+                  </a>
+                </td>
+                <td>
+                  <strong>{{ lic.product.name }}</strong>
+                  <div style="font-size: 0.75rem; color: var(--text-muted); font-family: monospace;">{{ lic.product.code }}</div>
+                </td>
+                <td>
+                  {% if lic.is_perpetual or lic.license_type == 'perpetual' %}
+                    <span class="badge badge-available">永久買斷</span>
+                  {% elif lic.license_type == 'subscription' %}
+                    <span class="badge badge-loaned">定期訂閱</span>
+                  {% else %}
+                    <span class="badge badge-secondary">{{ lic.get_license_type_display }}</span>
+                  {% endif %}
+                </td>
+                <td><strong>{{ lic.quantity }}</strong> {{ lic.unit }}</td>
+                <td>
+                  {% with specs=lic.list_custom_specs %}
+                    {% if specs %}
+                      <div style="display: flex; flex-wrap: wrap; gap: 4px; max-width: 240px;">
+                        {% for s in specs %}
+                          <span class="badge badge-secondary" style="font-size: 0.7rem; padding: 2px 6px;">{{ s.label }}: {{ s.value }}</span>
+                        {% endfor %}
+                      </div>
+                    {% else %}
+                      <span style="color: var(--text-muted); font-size: 0.8rem;">-</span>
+                    {% endif %}
+                  {% endwith %}
+                </td>
+                <td>
+                  {% if lic.is_perpetual or lic.license_type == 'perpetual' %}
+                    <span style="color: #059669; font-weight: 600;"><i class="fa-solid fa-infinity"></i> 永久</span>
+                  {% elif lic.end_date %}
+                    {{ lic.end_date|date:"Y-m-d" }}
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">
+                      {% if lic.days_remaining < 0 %}逾期 {{ lic.days_remaining|stringformat:"+d"|slice:"1:" }} 天
+                      {% else %}剩餘 {{ lic.days_remaining }} 天
+                      {% endif %}
+                    </div>
+                  {% else %}-{% endif %}
+                </td>
+                <td>
+                  <span class="badge {{ lic.badge_class }}">{{ lic.status_display }}</span>
+                </td>
+                <td>
+                  {% with active_cts=lic.active_maintenance_contracts %}
+                    {% if active_cts %}
+                      {% for c in active_cts %}
+                        <a href="{% url 'contract-update' c.pk %}" class="badge badge-available" style="text-decoration: none; display: inline-block; margin-bottom: 2px;" title="合約到期日: {{ c.end_date|date:'Y-m-d'|default:'未設定' }}">
+                          <i class="fa-solid fa-shield-halved"></i> 維護中 ({{ c.contract_no }})
+                        </a>
+                      {% endfor %}
+                    {% else %}
+                      <span class="badge badge-secondary" style="color: var(--text-muted);">未納入有效維護</span>
+                    {% endif %}
+                  {% endwith %}
+                </td>
+                <td style="text-align: right; white-space: nowrap;">
+                  {% if can_approve_licenses and lic.approval_status == 'pending' %}
+                    <form method="post" action="{% url 'license-approve' lic.pk %}" style="display:inline;" onsubmit="return confirm('確定核准軟體授權書「{{ lic.license_no }}」正式生效嗎？');">
+                      {% csrf_token %}
+                      <input type="hidden" name="next" value="{{ request.get_full_path }}#card-licenses">
+                      <button type="submit" class="btn btn-primary btn-sm" title="核准通過" style="background: #059669; border-color: #059669;">
+                        <i class="fa-solid fa-check"></i>
+                      </button>
+                    </form>
+                  {% endif %}
+                  {% if lic.approval_status == 'approved' %}
+                    <button type="button" class="btn btn-outline btn-sm" data-cert-export="license" data-cert-id="{{ lic.pk }}" title="匯出軟體授權證書圖檔" style="color: #4d7c0f; border-color: rgba(101, 163, 13, 0.35);">
+                      <i class="fa-solid fa-award"></i>
+                    </button>
+                  {% else %}
+                    <button type="button" class="btn btn-outline btn-sm" disabled title="尚未覆核通過，無法匯出正式證書" style="opacity: 0.4; cursor: not-allowed;">
+                      <i class="fa-solid fa-award"></i>
+                    </button>
+                  {% endif %}
+                  <a href="{% url 'license-detail' lic.pk %}" class="btn btn-outline btn-sm" title="詳情">
+                    <i class="fa-solid fa-eye"></i>
+                  </a>
+                  {% if can_edit_licenses %}
+                    <a href="{% url 'license-update' lic.pk %}" class="btn btn-outline btn-sm" title="編輯">
+                      <i class="fa-solid fa-pen"></i>
+                    </a>
+                    <a href="{% url 'license-delete' lic.pk %}?next={% url 'customer-detail' customer.pk %}" class="btn btn-outline btn-sm" style="color: #ef4444;" title="刪除授權" onclick="return confirm('確定要刪除軟體授權書「{{ lic.license_no }}」嗎？此操作無法復原。');">
+                      <i class="fa-solid fa-trash"></i>
+                    </a>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div id="licenses-empty-active" style="display: none; padding: 2rem; text-align: center; color: var(--text-muted);">
+        <i class="fa-solid fa-circle-info" style="margin-right: 0.35rem; color: var(--primary);"></i>
+        目前無有效或待生效軟體授權（共 <span id="licenses-total-msg">0</span> 筆歷史授權），
+        <a href="javascript:void(0);" onclick="const cb = document.getElementById('toggle-all-licenses'); if(cb){cb.checked = true; cb.dispatchEvent(new Event('change'));}" style="color: var(--primary); text-decoration: underline; font-weight: 600;">
+          點此顯示全部
+        </a>
+      </div>
+    {% else %}
+      <div style="padding: 2rem; text-align: center; color: var(--text-muted);">
+        此客戶目前尚無採購軟體授權書
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Hardware Devices Currently With Customer -->
+<div class="card collapsible-card" id="card-hardware">
+  <div class="card-header collapsible-header">
+    <div class="card-title">
+      <i class="fa-solid fa-boxes-stacked"></i> 客戶目前持有之硬體設備 ({{ probes.count }} 台)
+    </div>
+    <div style="display: flex; align-items: center; gap: 0.75rem;">
+      {% if can_edit_probe or can_edit_hardware %}
+        <a href="{% url 'hardware-transaction-create' %}?customer={{ customer.pk }}&type=OUT&next={% url 'customer-detail' customer.pk %}" class="btn btn-outline btn-sm" title="從現有庫存調撥出貨給此客戶">
+          <i class="fa-solid fa-truck-ramp-box"></i> 庫存出貨
+        </a>
+      {% endif %}
+      <button type="button" class="card-collapse-btn" aria-label="收合/展開" title="收合/展開" aria-expanded="true">
+        <i class="fa-solid fa-chevron-up"></i>
+      </button>
+    </div>
+  </div>
+  <div class="card-body">
+    {% if probes %}
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>設備序號</th>
+              <th>型號</th>
+              <th>自訂規格</th>
+              <th>狀態</th>
+              <th>原廠維護狀態</th>
+              <th>進貨日期</th>
+              <th>預計歸還日</th>
+              <th>位置</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in probes %}
+              <tr>
+                <td>
+                  <a href="{% url 'hardware-detail' p.pk %}" style="font-weight: 700; color: var(--primary); text-decoration: none;">
+                    {{ p.code }}
+                  </a>
+                  {% if p.is_specs_overridden %}
+                    <span class="badge badge-secondary" style="font-size: 0.65rem; margin-left: 4px;" title="規格有單機覆寫">客製</span>
+                  {% endif %}
+                </td>
+                <td>{{ p.model.name }}</td>
+                <td>
+                  {% with specs=p.list_custom_specs %}
+                    {% if specs %}
+                      <div style="display: flex; flex-wrap: wrap; gap: 4px; max-width: 240px;">
+                        {% for s in specs %}
+                          <span class="badge badge-secondary" style="font-size: 0.7rem; padding: 2px 6px;">{{ s.label }}: {{ s.value }}</span>
+                        {% endfor %}
+                      </div>
+                    {% else %}
+                      <span style="color: var(--text-muted); font-size: 0.8rem;">-</span>
+                    {% endif %}
+                  {% endwith %}
+                </td>
+                <td>
+                  {% if p.status == 'shipped' %}<span class="badge badge-shipped">已出貨</span>
+                  {% elif p.status == 'loaned' %}<span class="badge badge-loaned">借測中</span>
+                  {% elif p.status == 'pending_ship' %}<span class="badge badge-loaned"><i class="fa-solid fa-lock"></i> 出貨待審</span>
+                  {% elif p.status == 'pending_loan' %}<span class="badge badge-loaned"><i class="fa-solid fa-lock"></i> 借測待審</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% with active_cts=p.active_maintenance_contracts %}
+                    {% if active_cts %}
+                      {% for c in active_cts %}
+                        <a href="{% url 'contract-update' c.pk %}" class="badge badge-available" style="text-decoration: none; display: inline-block; margin-bottom: 2px;" title="合約到期日: {{ c.end_date|date:'Y-m-d'|default:'未設定' }}">
+                          <i class="fa-solid fa-shield-halved"></i> 維護中 ({{ c.contract_no }})
+                        </a>
+                      {% endfor %}
+                    {% else %}
+                      <span class="badge badge-secondary" style="color: var(--text-muted);">未納入有效維護</span>
+                    {% endif %}
+                  {% endwith %}
+                </td>
+                <td>{{ p.acquired_at|date:"Y-m-d"|default:"-" }}</td>
+                <td>
+                  {% if p.expected_return_at %}
+                    {% if p.is_loan_overdue %}
+                      <span class="badge badge-scrapped"><i class="fa-solid fa-circle-exclamation"></i> 逾期 ({{ p.expected_return_at|date:"Y-m-d" }})</span>
+                    {% else %}
+                      {{ p.expected_return_at|date:"Y-m-d" }}
+                    {% endif %}
+                  {% else %}-{% endif %}
+                </td>
+                <td style="white-space: nowrap;">
+                  <div style="display: flex; gap: 0.4rem; align-items: center;">
+                    {% if can_approve_hardware %}
+                      {% if p.status == 'pending_ship' or p.status == 'pending_loan' %}
+                        <form method="post" action="{% url 'hardware-approve' p.pk %}" style="display:inline;" onsubmit="return confirm('確定核准設備「{{ p.code }}」正式出庫嗎？');">
+                          {% csrf_token %}
+                          <input type="hidden" name="next" value="{{ request.get_full_path }}#card-hardware">
+                          <button type="submit" class="btn btn-primary btn-sm" title="核准出庫" style="background: #059669; border-color: #059669;">
+                            <i class="fa-solid fa-check"></i> 核准
+                          </button>
+                        </form>
+                      {% endif %}
+                    {% endif %}
+                    <a href="{% url 'hardware-detail' p.pk %}" class="btn btn-outline btn-sm" title="檢視設備詳情">
+                      <i class="fa-solid fa-eye"></i> 檢視
+                    </a>
+                    {% if can_edit_probe or can_edit_hardware %}
+                      {% if p.status == 'shipped' or p.status == 'loaned' %}
+                        <button type="button" 
+                                class="btn btn-outline btn-sm" 
+                                style="color: #ea580c; border-color: #fdba74;"
+                                title="辦理退貨/歸還入庫"
+                                onclick="openReturnDeviceModal('{{ p.pk }}', '{{ p.code }}', '{{ p.model.name|escapejs }}', '{{ p.get_status_display|escapejs }}')">
+                          <i class="fa-solid fa-arrow-rotate-left"></i> 退貨
+                        </button>
+                      {% endif %}
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div style="padding: 2rem; text-align: center; color: var(--text-muted);">
+        <p style="margin-bottom: 0.75rem;">此客戶目前無出貨或借測中之設備</p>
+        {% if can_edit_probe or can_edit_hardware %}
+          <div style="display: flex; justify-content: center; gap: 0.75rem;">
+            <a href="{% url 'hardware-transaction-create' %}?customer={{ customer.pk }}&type=OUT&next={% url 'customer-detail' customer.pk %}" class="btn btn-outline btn-sm">
+              <i class="fa-solid fa-truck-ramp-box"></i> 從庫存出貨給此客戶
+            </a>
+          </div>
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Customer Activity & Execution Trajectory Card -->
+<div class="card collapsible-card" id="activity-section">
+  <div class="card-header collapsible-header" style="flex-wrap: wrap; gap: 0.75rem;">
+    <div class="card-title">
+      <i class="fa-solid fa-timeline" style="color: var(--primary);"></i>
+      客戶執行軌跡與討論歷程
+      <span class="badge badge-secondary" style="font-size: 0.8rem; margin-left: 0.5rem;" id="activity-count-badge">
+        {{ activity_total_count }} 則紀錄
+      </span>
+    </div>
+    <!-- Filter Tags & Collapse Button -->
+    <div style="display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; margin-left: auto;">
+      <span style="font-size: 0.8rem; color: var(--text-muted); margin-right: 0.25rem;">類型篩選:</span>
+      <button type="button" class="btn btn-outline btn-sm activity-filter active" data-filter="all" style="padding: 0.2rem 0.6rem; font-size: 0.75rem;">
+        全部 ({{ activity_total_count }})
+      </button>
+      <button type="button" class="btn btn-outline btn-sm activity-filter" data-filter="meeting" style="padding: 0.2rem 0.6rem; font-size: 0.75rem;">
+        <i class="fa-solid fa-users"></i> 會議
+      </button>
+      <button type="button" class="btn btn-outline btn-sm activity-filter" data-filter="call" style="padding: 0.2rem 0.6rem; font-size: 0.75rem;">
+        <i class="fa-solid fa-phone"></i> 拜訪
+      </button>
+      <button type="button" class="btn btn-outline btn-sm activity-filter" data-filter="requirement" style="padding: 0.2rem 0.6rem; font-size: 0.75rem;">
+        <i class="fa-solid fa-clipboard-list"></i> 需求
+      </button>
+      <button type="button" class="btn btn-outline btn-sm activity-filter" data-filter="support" style="padding: 0.2rem 0.6rem; font-size: 0.75rem;">
+        <i class="fa-solid fa-headset"></i> 支援
+      </button>
+      <button type="button" class="btn btn-outline btn-sm activity-filter" data-filter="quotation" style="padding: 0.2rem 0.6rem; font-size: 0.75rem;">
+        <i class="fa-solid fa-file-invoice-dollar"></i> 報價
+      </button>
+      <button type="button" class="btn btn-outline btn-sm activity-filter" data-filter="other" style="padding: 0.2rem 0.6rem; font-size: 0.75rem;">
+        <i class="fa-solid fa-note-sticky"></i> 備註
+      </button>
+      <button type="button" class="card-collapse-btn" aria-label="收合/展開" title="收合/展開" aria-expanded="true" style="margin-left: 0.25rem;">
+        <i class="fa-solid fa-chevron-up"></i>
+      </button>
+    </div>
+  </div>
+
+  <div class="card-body">
+    <!-- Search & Author/Date Filter Bar for Activity Timeline -->
+    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 0.85rem 1rem; margin-bottom: 1.25rem; display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+      <div style="flex: 1; min-width: 220px; position: relative;">
+        <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 0.85rem; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 0.85rem;"></i>
+        <input type="text" id="activity-search-input" class="form-control" style="padding-left: 2.25rem; font-size: 0.875rem;" placeholder="搜尋留言內容、討論事項或窗口姓名...">
+      </div>
+      <div>
+        <select id="activity-author-filter" class="form-control" style="font-size: 0.875rem; width: auto; min-width: 140px;">
+          <option value="">全部留言同仁</option>
+          {% for uname, dname in activity_authors.items %}
+            <option value="{{ uname }}">{{ dname }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.4rem;">
+        <span style="font-size: 0.8rem; color: var(--text-muted);">日期:</span>
+        <input type="date" id="activity-date-from" class="form-control" style="font-size: 0.825rem; width: auto; padding: 0.35rem 0.5rem;" title="起始日期">
+        <span style="color: var(--text-muted);">~</span>
+        <input type="date" id="activity-date-to" class="form-control" style="font-size: 0.825rem; width: auto; padding: 0.35rem 0.5rem;" title="結束日期">
+      </div>
+      <button type="button" class="btn btn-outline btn-sm" onclick="resetActivityFilters()" style="font-size: 0.8rem;">
+        清除篩選
+      </button>
+    </div>
+
+    <!-- Quick Log Input Card (Trello Style Comment Box) -->
+    <div style="background: white; border: 1px solid var(--glass-border); border-radius: 12px; padding: 1.25rem; margin-bottom: 2rem; box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);">
+      <form method="post" action="{% url 'activity-create' customer.pk %}" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div style="display: flex; gap: 0.75rem; align-items: flex-start; margin-bottom: 1rem;">
+          <div style="width: 38px; height: 38px; border-radius: 50%; background: var(--primary-light); color: var(--primary); display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0;">
+            <i class="fa-solid fa-pen-nib"></i>
+          </div>
+          <div style="flex: 1;">
+            <!-- Top Row Options -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; margin-bottom: 0.75rem;">
+              <div>
+                <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted); display: block; margin-bottom: 0.2rem;">
+                  <i class="fa-solid fa-tag"></i> 紀錄類型
+                </label>
+                {{ activity_form.activity_type }}
+              </div>
+              <div>
+                <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted); display: block; margin-bottom: 0.2rem;">
+                  <i class="fa-solid fa-user-tie"></i> 關聯客戶窗口
+                </label>
+                {{ activity_form.contact }}
+              </div>
+              <div>
+                <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted); display: block; margin-bottom: 0.2rem;">
+                  <i class="fa-regular fa-calendar-check"></i> 下次跟進日期 (選填)
+                </label>
+                {{ activity_form.follow_up_date }}
+              </div>
+            </div>
+
+            <!-- Textarea -->
+            <div style="margin-bottom: 0.75rem;">
+              {{ activity_form.content }}
+            </div>
+
+            <!-- Bottom Row: File Upload and Submit Button -->
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+              <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                <label for="id_files" class="btn btn-outline btn-sm" style="cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem; margin-bottom: 0;">
+                  <i class="fa-solid fa-paperclip"></i>
+                  <span>新增附件檔案 (支援多選)</span>
+                </label>
+                <input type="file" name="files" id="id_files" multiple style="display: none;" onchange="handleNewFilesSelect(this)">
+                <span id="new-files-info" style="font-size: 0.8rem; color: var(--text-muted);">尚未選擇檔案</span>
+              </div>
+
+              <button type="submit" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1.25rem;">
+                <i class="fa-solid fa-paper-plane"></i>
+                <span>發布討論紀錄</span>
+              </button>
+            </div>
+            <div id="new-files-preview-list" style="display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem;"></div>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <!-- Timeline Logs Display -->
+    <div class="activity-timeline-container" style="position: relative; padding-left: 2rem; margin-top: 1rem;">
+      <!-- Timeline Vertical Center Line -->
+      <div style="position: absolute; top: 0; bottom: 0; left: 15px; width: 2px; background: #e2e8f0;"></div>
+
+      <div id="activity-items-wrapper">
+        {% include "customers/activity_log_items.html" %}
+      </div>
+
+      <div id="activity-empty-state" style="{% if activity_logs %}display: none;{% endif %} background: white; border: 1px dashed #cbd5e1; border-radius: 12px; padding: 2.5rem; text-align: center; color: var(--text-muted); margin-bottom: 1.5rem;">
+        <i class="fa-regular fa-comments fa-3x" style="color: #cbd5e1; margin-bottom: 0.75rem; display: block;"></i>
+        <div style="font-size: 1rem; font-weight: 600; color: var(--text-main); margin-bottom: 0.25rem;">尚未有執行軌跡紀錄</div>
+        <div style="font-size: 0.875rem;">您可以在上方輸入框記錄與此客戶的第一筆討論歷程、拜訪或會議筆記。</div>
+      </div>
+
+      <!-- Load More Button Container -->
+      <div id="activity-load-more-container" style="text-align: center; margin: 1.5rem 0 0.5rem 0; {% if not activity_has_next %}display: none;{% endif %}">
+        <button type="button" id="activity-load-more-btn" class="btn btn-outline" style="border-radius: 30px; padding: 0.5rem 1.75rem; font-size: 0.875rem; font-weight: 600; color: var(--primary); border-color: rgba(79, 70, 229, 0.35); box-shadow: 0 2px 6px rgba(79, 70, 229, 0.08); background: white;">
+          <i class="fa-solid fa-angles-down"></i> 載入更多紀錄 (Load More)
+        </button>
+        <div id="activity-loading-spinner" style="display: none; color: var(--text-muted); font-size: 0.875rem; padding: 0.5rem;">
+          <i class="fa-solid fa-circle-notch fa-spin" style="color: var(--primary);"></i> 載入中...
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Activity Modal -->
+<div id="editLogModal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); backdrop-filter: blur(4px); z-index: 1000; align-items: center; justify-content: center; padding: 1.5rem;">
+  <div style="background: white; border-radius: 14px; width: 100%; max-width: 650px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1); border: 1px solid var(--glass-border);">
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 1.25rem 1.5rem; border-bottom: 1px solid #f1f5f9;">
+      <div style="font-size: 1.15rem; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 0.5rem;">
+        <i class="fa-solid fa-pen-to-square" style="color: var(--primary);"></i> 編輯客戶執行軌跡
+      </div>
+      <button type="button" onclick="closeEditLogModal()" style="background: none; border: none; font-size: 1.25rem; color: var(--text-muted); cursor: pointer;">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+    <form id="editLogForm" method="post" action="" enctype="multipart/form-data" style="padding: 1.5rem;">
+      {% csrf_token %}
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; margin-bottom: 1rem;">
+        <div>
+          <label style="font-size: 0.8rem; font-weight: 600; color: var(--text-main); display: block; margin-bottom: 0.25rem;">
+            紀錄類型
+          </label>
+          <select name="activity_type" id="modal_activity_type" class="form-control" required>
+            <option value="meeting">會議記錄</option>
+            <option value="call">電話拜訪</option>
+            <option value="requirement">需求溝通</option>
+            <option value="support">售後/技術支援</option>
+            <option value="quotation">報價討論</option>
+            <option value="other">一般備註</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size: 0.8rem; font-weight: 600; color: var(--text-main); display: block; margin-bottom: 0.25rem;">
+            關聯窗口
+          </label>
+          <select name="contact" id="modal_contact" class="form-control">
+            <option value="">-- 關聯窗口 (選填) --</option>
+            {% for c in contacts %}
+              <option value="{{ c.pk }}">{{ c.name }}{% if c.title %} ({{ c.title }}){% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label style="font-size: 0.8rem; font-weight: 600; color: var(--text-main); display: block; margin-bottom: 0.25rem;">
+            下次跟進日期
+          </label>
+          <input type="date" name="follow_up_date" id="modal_follow_up_date" class="form-control">
+        </div>
+      </div>
+
+      <div style="margin-bottom: 1.25rem;">
+        <label style="font-size: 0.8rem; font-weight: 600; color: var(--text-main); display: block; margin-bottom: 0.25rem;">
+          討論與紀錄內容
+        </label>
+        <textarea name="content" id="modal_content" rows="4" class="form-control" required placeholder="輸入詳細討論內容..."></textarea>
+      </div>
+
+      <div style="margin-bottom: 1.5rem; background: #f8fafc; padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid #e2e8f0;">
+        <label style="font-size: 0.8rem; font-weight: 600; color: var(--text-main); display: block; margin-bottom: 0.35rem;">
+          <i class="fa-solid fa-plus"></i> 追加上傳新附件 (選填，支援多選)
+        </label>
+        <input type="file" name="files" multiple class="form-control" style="font-size: 0.85rem;">
+        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">
+          既有附件若需刪除，可直接在卡片上點選刪除圖示。
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+        <button type="button" class="btn btn-outline" onclick="closeEditLogModal()">取消</button>
+        <button type="submit" class="btn btn-primary">
+          <i class="fa-solid fa-check"></i> 儲存變更
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Add / Edit Customer Info Section Modal -->
+<div id="infoSectionModal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); backdrop-filter: blur(4px); z-index: 1000; align-items: center; justify-content: center; padding: 1.5rem;">
+  <div style="background: white; border-radius: 14px; width: 100%; max-width: 650px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1); border: 1px solid var(--glass-border);">
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 1.25rem 1.5rem; border-bottom: 1px solid #f1f5f9;">
+      <div id="infoSectionModalTitle" style="font-size: 1.15rem; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 0.5rem;">
+        <i class="fa-solid fa-sitemap" style="color: var(--primary);"></i> 新增客戶自訂資訊區塊
+      </div>
+      <button type="button" onclick="closeInfoSectionModal()" style="background: none; border: none; font-size: 1.25rem; color: var(--text-muted); cursor: pointer;">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+    <form id="infoSectionForm" method="post" action="{% url 'info-section-create' customer.pk %}" style="padding: 1.5rem;">
+      {% csrf_token %}
+      <div style="display: grid; grid-template-columns: 3fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+        <div>
+          <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-main); display: block; margin-bottom: 0.25rem;">
+            區塊名稱 (可自由命名) <span style="color: #ef4444;">*</span>
+          </label>
+          <input type="text" name="title" id="info_sec_title" class="form-control" required placeholder="例如：客戶環境架構、部署主機與 IP 清單、遠端連線方式">
+        </div>
+        <div>
+          <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-main); display: block; margin-bottom: 0.25rem;">
+            顯示排序
+          </label>
+          <input type="number" name="sort_order" id="info_sec_sort_order" class="form-control" value="0" min="0">
+        </div>
+      </div>
+
+      <div style="margin-bottom: 1.25rem;">
+        <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-main); display: block; margin-bottom: 0.25rem;">
+          結構化現況與環境內容 <span style="color: #ef4444;">*</span>
+        </label>
+        <textarea name="content" id="info_sec_content" rows="6" class="form-control" required placeholder="輸入該區塊詳細資訊（如拓樸架構說明、網段設定、伺服器規格、環境注意事項等）..."></textarea>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+        <button type="button" class="btn btn-outline" onclick="closeInfoSectionModal()">取消</button>
+        <button type="submit" class="btn btn-primary">
+          <i class="fa-solid fa-floppy-disk"></i> 儲存區塊
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: 設備退貨/歸還確認 -->
+<div id="returnDeviceModal" class="modal-overlay" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1050; align-items: center; justify-content: center;">
+  <div style="background: white; border-radius: 14px; width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1); border: 1px solid var(--glass-border);">
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 1.25rem 1.5rem; border-bottom: 1px solid #f1f5f9;">
+      <div style="font-size: 1.15rem; font-weight: 700; color: #c2410c; display: flex; align-items: center; gap: 0.5rem;">
+        <i class="fa-solid fa-arrow-rotate-left"></i> 辦理硬體設備退貨 / 歸還入庫
+      </div>
+      <button type="button" onclick="closeReturnDeviceModal()" style="background: none; border: none; font-size: 1.25rem; color: var(--text-muted); cursor: pointer;">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+    <form id="returnDeviceForm" method="post" action="" style="padding: 1.5rem;">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{% url 'customer-detail' customer.pk %}">
+
+      <div style="background: #f8fafc; padding: 1rem 1.25rem; border-radius: 8px; margin-bottom: 1.25rem; border: 1px solid var(--glass-border); line-height: 1.7; font-size: 0.9rem;">
+        <div><strong>設備序號：</strong> <span id="return_modal_device_code" style="font-family: monospace; font-weight: 700; color: var(--primary);"></span></div>
+        <div><strong>型號名稱：</strong> <span id="return_modal_device_model"></span></div>
+        <div><strong>目前狀態：</strong> <span id="return_modal_device_status" class="badge badge-secondary"></span></div>
+        <div><strong>持有客戶：</strong> {{ customer.name }} ({{ customer.code }})</div>
+      </div>
+
+      <div style="margin-bottom: 1.25rem;">
+        <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-main); display: block; margin-bottom: 0.25rem;">
+          退貨備註說明 (選填)
+        </label>
+        <textarea name="note" id="return_modal_note" rows="2" class="form-control" placeholder="輸入退貨原因或備註，留空將使用系統預設說明"></textarea>
+      </div>
+
+      <div style="background: rgba(234, 88, 12, 0.08); padding: 0.65rem 0.85rem; border-radius: 6px; margin-bottom: 1.25rem; font-size: 0.8rem; color: #9a3412;">
+        <i class="fa-solid fa-circle-info"></i> 確認退貨後，設備狀態將恢復為「庫存中」，解除客戶持有並自動建立庫存退貨紀錄。
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+        <button type="button" class="btn btn-outline" onclick="closeReturnDeviceModal()">取消</button>
+        <button type="submit" class="btn btn-primary" style="background: #ea580c; border-color: #ea580c;">
+          <i class="fa-solid fa-check"></i> 確認退貨入庫
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: 查看關注此客戶的名單 -->
+<div id="followersModal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); backdrop-filter: blur(4px); z-index: 1050; align-items: center; justify-content: center; padding: 1.5rem;">
+  <div style="background: white; border-radius: 14px; width: 100%; max-width: 680px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.12), 0 8px 10px -6px rgba(0,0,0,0.12); border: 1px solid var(--glass-border);">
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 1.25rem 1.5rem; border-bottom: 1px solid #f1f5f9;">
+      <div style="font-size: 1.15rem; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 0.5rem;">
+        <i class="fa-solid fa-star" style="color: #f59e0b;"></i> 關注此客戶的同仁名單 ({{ followers_count }} 人)
+      </div>
+      <button type="button" onclick="closeFollowersModal()" style="background: none; border: none; font-size: 1.25rem; color: var(--text-muted); cursor: pointer;">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+
+    <div style="padding: 1.5rem;">
+      {% if can_manage_system and non_follower_users %}
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1rem; margin-bottom: 1.25rem;">
+          <form method="post" action="{% url 'customer-follower-manage' customer.pk %}" style="display: flex; gap: 0.65rem; align-items: center; flex-wrap: wrap;">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="add">
+            <span style="font-size: 0.85rem; font-weight: 600; color: var(--text-main);">
+              <i class="fa-solid fa-user-plus" style="color: var(--primary);"></i> 管理員代為加入關注人：
+            </span>
+            <select name="user_id" class="form-control" style="flex: 1; min-width: 200px; font-size: 0.875rem;" required>
+              <option value="">-- 選擇要加入關注的同仁 --</option>
+              {% for u in non_follower_users %}
+                <option value="{{ u.pk }}">{{ u.get_full_name|default:u.username }} ({{ u.username }})</option>
+              {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-primary btn-sm">
+              <i class="fa-solid fa-plus"></i> 加入關注
+            </button>
+          </form>
+        </div>
+      {% endif %}
+
+      {% if follower_records %}
+        <div class="table-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th>關注同仁</th>
+                <th>帳號</th>
+                <th>角色權限</th>
+                <th>Email 通知狀態</th>
+                <th>關注時間</th>
+                {% if can_manage_system %}
+                  <th style="text-align: right;">管理</th>
+                {% endif %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for f in follower_records %}
+                <tr>
+                  <td>
+                    <div style="font-weight: 600; color: var(--text-main); display: flex; align-items: center; gap: 0.4rem;">
+                      <i class="fa-regular fa-circle-user" style="color: var(--primary);"></i>
+                      <span>{{ f.user.get_full_name|default:f.user.username }}</span>
+                      {% if f.user == request.user %}
+                        <span class="badge badge-available" style="font-size: 0.68rem;">本人</span>
+                      {% endif %}
+                    </div>
+                  </td>
+                  <td style="font-family: monospace; font-size: 0.85rem;">{{ f.user.username }}</td>
+                  <td>
+                    <span class="role-badge">
+                      {% if f.user.is_superuser %}系統超級管理員{% elif f.user.profile %}{{ f.user.profile.get_role_display }}{% else %}一般使用者{% endif %}
+                    </span>
+                  </td>
+                  <td>
+                    {% if not f.user.email %}
+                      <span class="badge badge-secondary" title="尚未設定電子信箱">未設信箱</span>
+                    {% elif f.user.profile and not f.user.profile.receive_email_notifications %}
+                      <span class="badge badge-secondary">已關閉通知</span>
+                    {% else %}
+                      <span class="badge badge-available" title="{{ f.user.email }}">
+                        <i class="fa-regular fa-envelope"></i> 接收通知中
+                      </span>
+                    {% endif %}
+                  </td>
+                  <td style="font-size: 0.825rem; color: var(--text-muted);">{{ f.created_at|date:"Y-m-d H:i" }}</td>
+                  {% if can_manage_system %}
+                    <td style="text-align: right;">
+                      <form method="post" action="{% url 'customer-follower-manage' customer.pk %}" style="display: inline;" onsubmit="return confirm('確定要移除「{{ f.user.username|escapejs }}」對此客戶的關注嗎？');">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="remove">
+                        <input type="hidden" name="user_id" value="{{ f.user.pk }}">
+                        <button type="submit" class="btn btn-outline btn-sm" style="color: #ef4444; padding: 0.2rem 0.5rem; font-size: 0.75rem;" title="移除關注">
+                          <i class="fa-solid fa-user-minus"></i> 移除
+                        </button>
+                      </form>
+                    </td>
+                  {% endif %}
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div style="text-align: center; padding: 2.5rem 1rem; color: var(--text-muted); background: #f8fafc; border-radius: 10px; border: 1px dashed #cbd5e1;">
+          <i class="fa-regular fa-star fa-2x" style="color: #94a3b8; margin-bottom: 0.5rem; display: block;"></i>
+          <div style="font-weight: 600; color: var(--text-main); margin-bottom: 0.25rem;">目前尚無任何同仁關注此客戶</div>
+          <div style="font-size: 0.85rem;">您可以點擊頁面右上角的「關注客戶」按鈕成為第一位關注者。</div>
+        </div>
+      {% endif %}
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #f1f5f9;">
+        <a href="{% url 'account-center' %}?tab=settings" style="font-size: 0.85rem; color: var(--primary); text-decoration: none; font-weight: 500;">
+          <i class="fa-solid fa-gear"></i> 前往我的帳號中心設定收信偏好
+        </a>
+        <button type="button" class="btn btn-outline" onclick="closeFollowersModal()">關閉視窗</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if can_edit_customers %}
+<!-- Bind Existing Customer as Child Modal -->
+<div id="bindChildModal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.55); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
+  <div class="card" style="width: 100%; max-width: 580px; margin: 0; padding: 1.5rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e2e8f0;">
+      <h3 style="font-size: 1.15rem; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+        <i class="fa-solid fa-link" style="color: var(--primary);"></i>
+        綁定既有客戶為「{{ customer.name }}」的下層客戶
+      </h3>
+      <button type="button" onclick="closeBindChildModal()" style="background: none; border: none; font-size: 1.25rem; color: var(--text-muted); cursor: pointer;">&times;</button>
+    </div>
+
+    <form method="post" action="{% url 'customer-bind-child' customer.pk %}">
+      {% csrf_token %}
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem; line-height: 1.5;">
+        選擇系統內既有的客戶，將其「上層客戶」設定為 <strong>[{{ customer.code }}] {{ customer.name }}</strong>（系統已自動過濾本客戶與上層客戶以避免循環指向）。
+      </p>
+
+      {% if bindable_customers %}
+        <div class="form-group">
+          <label for="bindChildSearchInput">快速搜尋要綁定的客戶</label>
+          <div style="position: relative; margin-bottom: 0.5rem;">
+            <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 0.85rem; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 0.85rem;"></i>
+            <input type="text" id="bindChildSearchInput" class="form-control" style="padding-left: 2.3rem;" placeholder="輸入客戶代號或名稱篩選下方選單...">
+          </div>
+          <label for="bindChildSelect">選擇下層客戶 <span style="color: #ef4444;">*</span></label>
+          <select name="child_customer_id" id="bindChildSelect" class="form-control" required size="7" style="height: auto; padding: 0.4rem;">
+            {% for bc in bindable_customers %}
+              <option value="{{ bc.pk }}" style="padding: 0.35rem 0.5rem; border-radius: 4px;">
+                {{ bc.code }} - {{ bc.name }}{% if bc.parent %} (原上層: {{ bc.parent.code }} {{ bc.parent.name }}){% endif %}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #f1f5f9;">
+          <button type="button" class="btn btn-outline" onclick="closeBindChildModal()">取消</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="fa-solid fa-check"></i> 確認綁定為下層
+          </button>
+        </div>
+      {% else %}
+        <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 1.5rem; text-align: center; color: var(--text-muted);">
+          目前沒有其他可供綁定的既有客戶，您可直接點擊「<a href="{% url 'customer-create' %}?parent={{ customer.pk }}" style="color: var(--primary); font-weight: 600;">新增下層客戶</a>」建立新客戶。
+        </div>
+        <div style="display: flex; justify-content: flex-end; margin-top: 1rem;">
+          <button type="button" class="btn btn-outline" onclick="closeBindChildModal()">關閉</button>
+        </div>
+      {% endif %}
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<script>
+  // Collapsible Cards Functionality (Default is Expanded)
+  function toggleCardCollapse(card) {
+    const isNowCollapsed = card.classList.toggle('is-collapsed');
+    const btn = card.querySelector('.card-collapse-btn');
+    if (btn) {
+      btn.setAttribute('aria-expanded', !isNowCollapsed);
+      btn.title = isNowCollapsed ? '展開區塊' : '收合區塊';
+    }
+    updateToggleAllButton();
+  }
+
+  function initCollapsibleCards() {
+    const cards = document.querySelectorAll('.collapsible-card');
+    cards.forEach(card => {
+      const header = card.querySelector('.card-header.collapsible-header');
+      if (!header) return;
+
+      header.addEventListener('click', function(e) {
+        // Prevent toggle if clicking on interactive elements inside the header
+        if (e.target.closest('a, form, input, select, textarea, label, .activity-filter') ||
+            (e.target.closest('button') && !e.target.closest('.card-collapse-btn'))) {
+          return;
+        }
+        toggleCardCollapse(card);
+      });
+    });
+    updateToggleAllButton();
+  }
+
+  function toggleAllCards() {
+    const cards = document.querySelectorAll('.collapsible-card');
+    if (!cards.length) return;
+
+    // Check if all cards are currently collapsed
+    const allCollapsed = Array.from(cards).every(card => card.classList.contains('is-collapsed'));
+    // If all are collapsed, we expand all; otherwise we collapse all
+    const shouldCollapse = !allCollapsed;
+
+    cards.forEach(card => {
+      card.classList.toggle('is-collapsed', shouldCollapse);
+      const btn = card.querySelector('.card-collapse-btn');
+      if (btn) {
+        btn.setAttribute('aria-expanded', !shouldCollapse);
+        btn.title = shouldCollapse ? '展開區塊' : '收合區塊';
+      }
+    });
+
+    updateToggleAllButton();
+  }
+
+  function updateToggleAllButton() {
+    const cards = document.querySelectorAll('.collapsible-card');
+    if (!cards.length) return;
+
+    const allCollapsed = Array.from(cards).every(card => card.classList.contains('is-collapsed'));
+    const btnIcon = document.getElementById('toggle-all-icon');
+    const btnText = document.getElementById('toggle-all-text');
+
+    if (btnIcon && btnText) {
+      if (allCollapsed) {
+        btnIcon.className = 'fa-solid fa-angles-down';
+        btnText.textContent = '全部展開';
+      } else {
+        btnIcon.className = 'fa-solid fa-angles-up';
+        btnText.textContent = '全部收合';
+      }
+    }
+  }
+
+  // Initialize collapsible cards on DOM ready
+  document.addEventListener('DOMContentLoaded', initCollapsibleCards);
+  // Also run immediately in case DOM is already parsed
+  if (document.readyState !== 'loading') {
+    initCollapsibleCards();
+  }
+
+  // --- 3. 客戶自訂區塊 Show all / Show less ---
+  function initInfoSectionToggles() {
+    document.querySelectorAll('.info-section-card').forEach(card => {
+      const content = card.querySelector('.info-sec-content');
+      const fade = card.querySelector('.info-sec-fade');
+      const toggleBar = card.querySelector('.info-sec-toggle-bar');
+      const btn = card.querySelector('.info-sec-toggle-btn');
+      if (!content || !btn) return;
+
+      if (content.scrollHeight > 230) {
+        fade.style.display = 'block';
+        toggleBar.style.display = 'block';
+        let isExpanded = false;
+        btn.onclick = function() {
+          isExpanded = !isExpanded;
+          if (isExpanded) {
+            content.style.maxHeight = content.scrollHeight + 'px';
+            fade.style.display = 'none';
+            btn.innerHTML = '<i class="fa-solid fa-chevron-up"></i> 收合 (Show less)';
+          } else {
+            content.style.maxHeight = '220px';
+            fade.style.display = 'block';
+            btn.innerHTML = '<i class="fa-solid fa-chevron-down"></i> 顯示全部 (Show all)';
+          }
+        };
+      } else {
+        content.style.maxHeight = 'none';
+        fade.style.display = 'none';
+        toggleBar.style.display = 'none';
+      }
+    });
+  }
+
+  // --- 4. 執行軌跡動態載入與分頁篩選 ---
+  let currentActivityPage = 1;
+  let nextActivityPage = {{ activity_next_page|default:"null" }};
+  let currentActivityTypeFilter = 'all';
+  let activitySearchTimeout = null;
+
+  async function fetchActivities(page, append = false) {
+    const searchVal = (document.getElementById('activity-search-input')?.value || '').trim();
+    const authorVal = document.getElementById('activity-author-filter')?.value || '';
+    const dateFrom = document.getElementById('activity-date-from')?.value || '';
+    const dateTo = document.getElementById('activity-date-to')?.value || '';
+
+    const params = new URLSearchParams();
+    params.set('page', page);
+    if (currentActivityTypeFilter && currentActivityTypeFilter !== 'all') {
+      params.set('type', currentActivityTypeFilter);
+    }
+    if (authorVal) params.set('author', authorVal);
+    if (dateFrom) params.set('date_from', dateFrom);
+    if (dateTo) params.set('date_to', dateTo);
+    if (searchVal) params.set('q', searchVal);
+
+    const loadMoreBtn = document.getElementById('activity-load-more-btn');
+    const spinner = document.getElementById('activity-loading-spinner');
+    const container = document.getElementById('activity-load-more-container');
+    const wrapper = document.getElementById('activity-items-wrapper');
+    const emptyState = document.getElementById('activity-empty-state');
+    const badge = document.getElementById('activity-count-badge');
+
+    if (loadMoreBtn && spinner) {
+      loadMoreBtn.style.display = 'none';
+      spinner.style.display = 'inline-block';
+      if (container) container.style.display = 'block';
+    }
+
+    try {
+      const resp = await fetch(`{% url 'api-customer-activity-logs' customer.pk %}?${params.toString()}`);
+      if (!resp.ok) throw new Error('無法載入執行軌跡');
+      const data = await resp.json();
+
+      if (append) {
+        wrapper.insertAdjacentHTML('beforeend', data.html);
+      } else {
+        wrapper.innerHTML = data.html;
+      }
+
+      currentActivityPage = data.current_page;
+      nextActivityPage = data.next_page_number;
+
+      if (badge) {
+        badge.textContent = `${data.total_count} 則紀錄`;
+      }
+
+      if (!append && data.total_count === 0) {
+        if (emptyState) emptyState.style.display = 'block';
+      } else {
+        if (emptyState) emptyState.style.display = 'none';
+      }
+
+      if (container) {
+        if (data.has_next) {
+          container.style.display = 'block';
+          if (loadMoreBtn) loadMoreBtn.style.display = 'inline-flex';
+        } else {
+          container.style.display = 'none';
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching activities:', err);
+    } finally {
+      if (spinner) spinner.style.display = 'none';
+      if (nextActivityPage && loadMoreBtn) {
+        loadMoreBtn.style.display = 'inline-flex';
+      }
+    }
+  }
+
+  function applyActivityFilters() {
+    clearTimeout(activitySearchTimeout);
+    activitySearchTimeout = setTimeout(() => {
+      fetchActivities(1, false);
+    }, 250);
+  }
+
+  function resetActivityFilters() {
+    currentActivityTypeFilter = 'all';
+    document.querySelectorAll('.activity-filter').forEach(b => {
+      b.classList.toggle('active', b.getAttribute('data-filter') === 'all');
+    });
+    const searchInput = document.getElementById('activity-search-input');
+    const authorSelect = document.getElementById('activity-author-filter');
+    const dateFrom = document.getElementById('activity-date-from');
+    const dateTo = document.getElementById('activity-date-to');
+    if (searchInput) searchInput.value = '';
+    if (authorSelect) authorSelect.value = '';
+    if (dateFrom) dateFrom.value = '';
+    if (dateTo) dateTo.value = '';
+    fetchActivities(1, false);
+  }
+
+  function loadMoreActivities() {
+    if (nextActivityPage) {
+      fetchActivities(nextActivityPage, true);
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    initInfoSectionToggles();
+    const loadMoreBtn = document.getElementById('activity-load-more-btn');
+    if (loadMoreBtn) {
+      loadMoreBtn.addEventListener('click', loadMoreActivities);
+    }
+  });
+  if (document.readyState !== 'loading') {
+    initInfoSectionToggles();
+  }
+
+  // Filter timeline items by type button
+  document.querySelectorAll('.activity-filter').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      document.querySelectorAll('.activity-filter').forEach(b => b.classList.remove('active'));
+      this.classList.add('active');
+      currentActivityTypeFilter = this.getAttribute('data-filter');
+      fetchActivities(1, false);
+    });
+  });
+
+  document.getElementById('activity-search-input')?.addEventListener('input', applyActivityFilters);
+  document.getElementById('activity-author-filter')?.addEventListener('change', applyActivityFilters);
+  document.getElementById('activity-date-from')?.addEventListener('change', applyActivityFilters);
+  document.getElementById('activity-date-to')?.addEventListener('change', applyActivityFilters);
+
+  // Display selected files in create form
+  function handleNewFilesSelect(input) {
+    const info = document.getElementById('new-files-info');
+    const preview = document.getElementById('new-files-preview-list');
+    preview.innerHTML = '';
+    if (!input.files || input.files.length === 0) {
+      info.textContent = '尚未選擇檔案';
+      return;
+    }
+    info.textContent = `已選取 ${input.files.length} 個檔案:`;
+    Array.from(input.files).forEach(f => {
+      const badge = document.createElement('span');
+      badge.style.cssText = 'background: #e2e8f0; font-size: 0.75rem; padding: 2px 8px; border-radius: 9999px; display: inline-flex; align-items: center; gap: 4px;';
+      badge.innerHTML = `<i class="fa-regular fa-file"></i> ${f.name} (${(f.size / 1024).toFixed(1)} KB)`;
+      preview.appendChild(badge);
+    });
+  }
+
+  // Activity Log Modal handlers
+  function openEditLogModal(id, type, contactId, followUpDate, content) {
+    const modal = document.getElementById('editLogModal');
+    const form = document.getElementById('editLogForm');
+    form.action = `/customers/activities/${id}/edit/`;
+    document.getElementById('modal_activity_type').value = type;
+    document.getElementById('modal_contact').value = contactId || '';
+    document.getElementById('modal_follow_up_date').value = followUpDate || '';
+    document.getElementById('modal_content').value = content;
+    modal.style.display = 'flex';
+  }
+
+  function closeEditLogModal() {
+    document.getElementById('editLogModal').style.display = 'none';
+  }
+
+  // Info Section Modal handlers
+  function openAddInfoSectionModal() {
+    const modal = document.getElementById('infoSectionModal');
+    const form = document.getElementById('infoSectionForm');
+    const titleEl = document.getElementById('infoSectionModalTitle');
+    form.action = `{% url 'info-section-create' customer.pk %}`;
+    titleEl.innerHTML = '<i class="fa-solid fa-sitemap" style="color: var(--primary);"></i> 新增客戶自訂資訊區塊';
+    document.getElementById('info_sec_title').value = '';
+    document.getElementById('info_sec_sort_order').value = '0';
+    document.getElementById('info_sec_content').value = '';
+    modal.style.display = 'flex';
+  }
+
+  function openEditInfoSectionModal(id, title, sortOrder, content) {
+    const modal = document.getElementById('infoSectionModal');
+    const form = document.getElementById('infoSectionForm');
+    const titleEl = document.getElementById('infoSectionModalTitle');
+    form.action = `/customers/info-sections/${id}/edit/`;
+    titleEl.innerHTML = '<i class="fa-solid fa-pen-to-square" style="color: var(--primary);"></i> 編輯客戶自訂資訊區塊';
+    document.getElementById('info_sec_title').value = title;
+    document.getElementById('info_sec_sort_order').value = sortOrder || '0';
+    document.getElementById('info_sec_content').value = content;
+    modal.style.display = 'flex';
+  }
+
+  function closeInfoSectionModal() {
+    document.getElementById('infoSectionModal').style.display = 'none';
+  }
+
+  // Return Device Modal handlers
+  function openReturnDeviceModal(id, code, model, statusDisplay) {
+    const modal = document.getElementById('returnDeviceModal');
+    const form = document.getElementById('returnDeviceForm');
+    form.action = `/hardware/${id}/return/`;
+    document.getElementById('return_modal_device_code').textContent = code;
+    document.getElementById('return_modal_device_model').textContent = model;
+    document.getElementById('return_modal_device_status').textContent = statusDisplay;
+    document.getElementById('return_modal_note').value = '';
+    modal.style.display = 'flex';
+  }
+
+  function closeReturnDeviceModal() {
+    const modal = document.getElementById('returnDeviceModal');
+    if (modal) modal.style.display = 'none';
+  }
+
+  function openFollowersModal() {
+    const modal = document.getElementById('followersModal');
+    if (modal) modal.style.display = 'flex';
+  }
+
+  function closeFollowersModal() {
+    const modal = document.getElementById('followersModal');
+    if (modal) modal.style.display = 'none';
+  }
+
+  function openBindChildModal() {
+    const modal = document.getElementById('bindChildModal');
+    if (modal) {
+      modal.style.display = 'flex';
+      const searchInput = document.getElementById('bindChildSearchInput');
+      if (searchInput) {
+        searchInput.value = '';
+        searchInput.dispatchEvent(new Event('input'));
+        setTimeout(() => searchInput.focus(), 50);
+      }
+    }
+  }
+
+  function closeBindChildModal() {
+    const modal = document.getElementById('bindChildModal');
+    if (modal) modal.style.display = 'none';
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    const bindSearch = document.getElementById('bindChildSearchInput');
+    const bindSelect = document.getElementById('bindChildSelect');
+    if (bindSearch && bindSelect) {
+      const allBindOpts = Array.from(bindSelect.options).map(o => ({
+        value: o.value,
+        text: o.text,
+      }));
+      bindSearch.addEventListener('input', function() {
+        const q = this.value.trim().toLowerCase();
+        const currVal = bindSelect.value;
+        bindSelect.innerHTML = '';
+        allBindOpts.forEach(item => {
+          if (!q || item.text.toLowerCase().includes(q)) {
+            const opt = document.createElement('option');
+            opt.value = item.value;
+            opt.text = item.text;
+            opt.style.cssText = 'padding: 0.35rem 0.5rem; border-radius: 4px;';
+            if (item.value === currVal) opt.selected = true;
+            bindSelect.appendChild(opt);
+          }
+        });
+      });
+    }
+  });
+
+  // Close modals when clicking outside
+  window.addEventListener('click', function(e) {
+    const editLogModal = document.getElementById('editLogModal');
+    const infoSectionModal = document.getElementById('infoSectionModal');
+    const returnDeviceModal = document.getElementById('returnDeviceModal');
+    const followersModal = document.getElementById('followersModal');
+    const bindChildModal = document.getElementById('bindChildModal');
+    if (e.target === editLogModal) {
+      closeEditLogModal();
+    }
+    if (e.target === infoSectionModal) {
+      closeInfoSectionModal();
+    }
+    if (e.target === returnDeviceModal) {
+      closeReturnDeviceModal();
+    }
+    if (e.target === followersModal) {
+      closeFollowersModal();
+    }
+    if (e.target === bindChildModal) {
+      closeBindChildModal();
+    }
+  });
+
+  // --- Contracts & Licenses Table Active-Only Filtering ---
+  function setupTableFilter(config) {
+    const checkbox = document.getElementById(config.checkboxId);
+    const rows = document.querySelectorAll(config.rowSelector);
+    const counterEl = document.getElementById(config.counterId);
+    const tableContainer = document.getElementById(config.tableContainerId);
+    const emptyActiveEl = document.getElementById(config.emptyActiveId);
+    const totalMsgEl = document.getElementById(config.totalMsgId);
+
+    if (!rows.length) {
+      if (counterEl) counterEl.textContent = '(0)';
+      return;
+    }
+
+    const totalCount = rows.length;
+    let activeCount = 0;
+    rows.forEach(r => {
+      if (r.getAttribute('data-active') === '1') {
+        activeCount++;
+      }
+    });
+
+    if (totalMsgEl) totalMsgEl.textContent = totalCount;
+
+    // Display "(activeCount/totalCount)" if different, else "(totalCount)"
+    if (counterEl) {
+      if (activeCount === totalCount) {
+        counterEl.textContent = `(${totalCount})`;
+      } else {
+        counterEl.textContent = `(${activeCount}/${totalCount})`;
+      }
+    }
+
+    function applyFilter() {
+      const showAll = checkbox ? checkbox.checked : false;
+      let visibleCount = 0;
+
+      rows.forEach(row => {
+        const isActive = row.getAttribute('data-active') === '1';
+        if (showAll || isActive) {
+          row.style.display = '';
+          visibleCount++;
+        } else {
+          row.style.display = 'none';
+        }
+      });
+
+      if (visibleCount === 0 && emptyActiveEl && tableContainer) {
+        tableContainer.style.display = 'none';
+        emptyActiveEl.style.display = 'block';
+      } else {
+        if (tableContainer) tableContainer.style.display = '';
+        if (emptyActiveEl) emptyActiveEl.style.display = 'none';
+      }
+    }
+
+    if (checkbox) {
+      checkbox.checked = false; // Always default to unchecked (active only)
+      checkbox.addEventListener('change', applyFilter);
+    }
+
+    applyFilter();
+  }
+
+  function initTableFilters() {
+    setupTableFilter({
+      checkboxId: 'toggle-all-contracts',
+      rowSelector: '.contract-row',
+      counterId: 'contracts-counter',
+      tableContainerId: 'contracts-table-container',
+      emptyActiveId: 'contracts-empty-active',
+      totalMsgId: 'contracts-total-msg',
+    });
+
+    setupTableFilter({
+      checkboxId: 'toggle-all-licenses',
+      rowSelector: '.license-row',
+      counterId: 'licenses-counter',
+      tableContainerId: 'licenses-table-container',
+      emptyActiveId: 'licenses-empty-active',
+      totalMsgId: 'licenses-total-msg',
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', initTableFilters);
+  if (document.readyState !== 'loading') {
+    initTableFilters();
+  }
+</script>
+{% endblock %}
+

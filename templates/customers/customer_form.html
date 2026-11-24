@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - CRM Server{% endblock %}
+
+{% block content %}
+<div style="max-width: 800px; margin: 0 auto;">
+  <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+    <a href="{% if customer %}{% url 'customer-detail' customer.pk %}{% elif preset_parent %}{% url 'customer-detail' preset_parent.pk %}{% else %}{% url 'customer-list' %}{% endif %}" class="btn btn-outline btn-sm">
+      <i class="fa-solid fa-arrow-left"></i> 返回
+    </a>
+    <h1 style="font-size: 1.5rem; font-weight: 700;">{{ title }}</h1>
+  </div>
+
+  {% if preset_parent %}
+    <div style="background: rgba(79, 70, 229, 0.08); border: 1px solid rgba(79, 70, 229, 0.25); border-radius: 10px; padding: 0.85rem 1.15rem; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.75rem;">
+      <i class="fa-solid fa-diagram-project" style="color: var(--primary); font-size: 1.15rem;"></i>
+      <div style="font-size: 0.9rem;">
+        已預設將上層客戶指定為：<strong>[{{ preset_parent.code }}] {{ preset_parent.name }}</strong>（可於下方「上層客戶」欄位調整）
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <form method="post">
+      {% csrf_token %}
+      
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;">
+        <div class="form-group">
+          <label>客戶代號 / 統編 (唯一值) <span style="color: #ef4444;">*</span></label>
+          {{ form.code }}
+          {% if form.code.errors %}
+            <div style="color: #ef4444; font-size: 0.8rem; margin-top: 0.25rem;">{{ form.code.errors.0 }}</div>
+          {% endif %}
+          <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">可輸入 8 碼公司統一編號或機構自訂代號，全系統唯一。</div>
+        </div>
+
+        <div class="form-group">
+          <label>統一編號 (選填)</label>
+          {{ form.tax_id }}
+          {% if form.tax_id.errors %}
+            <div style="color: #ef4444; font-size: 0.8rem; margin-top: 0.25rem;">{{ form.tax_id.errors.0 }}</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>客戶公司 / 機構名稱 <span style="color: #ef4444;">*</span></label>
+        {{ form.name }}
+        {% if form.name.errors %}
+          <div style="color: #ef4444; font-size: 0.8rem; margin-top: 0.25rem;">{{ form.name.errors.0 }}</div>
+        {% endif %}
+      </div>
+
+      <div class="form-group" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1rem 1.15rem;">
+        <label for="id_parent" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+          <span><i class="fa-solid fa-diagram-project" style="color: var(--primary); margin-right: 4px;"></i> 上層客戶 / 經銷代理商 (選填)</span>
+          <span style="font-size: 0.75rem; font-weight: 400; color: var(--text-muted);">一個客戶僅能指向一個上層客戶；系統已自動排除會造成循環指向的選項</span>
+        </label>
+        <div style="display: flex; gap: 0.65rem; flex-wrap: wrap;">
+          <div style="flex: 0 0 240px; position: relative;">
+            <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 0.8rem;"></i>
+            <input type="text" id="parentCustomerSearchInput" class="form-control" style="padding-left: 2.1rem; font-size: 0.85rem;" placeholder="輸入代號或名稱篩選上層...">
+          </div>
+          <div style="flex: 1; min-width: 260px;">
+            {{ form.parent }}
+          </div>
+        </div>
+        {% if form.parent.errors %}
+          <div style="color: #ef4444; font-size: 0.8rem; margin-top: 0.35rem;">{{ form.parent.errors.0 }}</div>
+        {% endif %}
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;">
+        <div class="form-group">
+          <label>主要聯絡人姓名</label>
+          {{ form.contact }}
+        </div>
+        <div class="form-group">
+          <label>主要聯絡電話</label>
+          {{ form.phone }}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>電子郵件</label>
+        {{ form.email }}
+      </div>
+
+      <div class="form-group">
+        <label>公司地址</label>
+        {{ form.address }}
+      </div>
+
+      <!-- 全域客戶自訂擴充欄位 -->
+      {% if form.custom_fields_exist or True %}
+        <div id="customerDynamicFieldsSection" style="margin: 1.5rem 0 1.25rem 0; padding-top: 1rem; border-top: 1px dashed var(--glass-border);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+            <h3 style="font-size: 1rem; font-weight: 600; color: var(--primary); margin: 0;">
+              <i class="fa-solid fa-sliders"></i> 客戶自訂擴充欄位
+            </h3>
+            <a href="{% url 'customer-custom-fields' %}" class="btn btn-outline btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;">
+              <i class="fa-solid fa-gear"></i> 管理全域自訂欄位
+            </a>
+          </div>
+          <div id="customerDynamicFieldsContainer" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.15rem; background: #f8fafc; padding: 1.15rem; border-radius: 8px; border: 1px solid var(--glass-border);">
+            {% for field in form %}
+              {% if field.name|slice:":4" == "dyn_" %}
+                {% if field.field.widget.input_type == "checkbox" and field.field.choices %}
+                  <div class="form-group dyn-field-item" style="margin-bottom: 0; grid-column: 1 / -1;">
+                    <label>{{ field.label }}{% if field.field.required %} <span style="color: #ef4444;">*</span>{% endif %}</label>
+                    <div style="display: flex; flex-wrap: wrap; gap: 0.85rem; padding: 0.65rem 0.85rem; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px;">
+                      {% for subwidget in field %}
+                        <label style="display: inline-flex; align-items: center; gap: 0.4rem; margin-bottom: 0; cursor: pointer; font-weight: 500;">
+                          {{ subwidget.tag }} {{ subwidget.choice_label }}
+                        </label>
+                      {% endfor %}
+                    </div>
+                    {% if field.errors %}<div style="color: #dc2626; font-size: 0.8rem; margin-top: 0.25rem;">{{ field.errors.0 }}</div>{% endif %}
+                  </div>
+                {% elif field.field.widget.input_type == "checkbox" %}
+                  <div class="form-group dyn-field-item" style="margin-bottom: 0; display: flex; align-items: center; padding-top: 1.4rem;">
+                    <label style="display: inline-flex; align-items: center; cursor: pointer; margin-bottom: 0; font-weight: 600;">
+                      {{ field }} {{ field.label }}{% if field.field.required %} <span style="color: #ef4444; margin-left: 4px;">*</span>{% endif %}
+                    </label>
+                    {% if field.errors %}<div style="color: #dc2626; font-size: 0.8rem; margin-top: 0.25rem;">{{ field.errors.0 }}</div>{% endif %}
+                  </div>
+                {% else %}
+                  <div class="form-group dyn-field-item" style="margin-bottom: 0;">
+                    <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span style="color: #ef4444;">*</span>{% endif %}</label>
+                    {{ field }}
+                    {% if field.errors %}<div style="color: #dc2626; font-size: 0.8rem; margin-top: 0.25rem;">{{ field.errors.0 }}</div>{% endif %}
+                  </div>
+                {% endif %}
+              {% endif %}
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
+
+      <div class="form-group">
+        <label>備註說明</label>
+        {{ form.note }}
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--glass-border);">
+        <a href="{% if customer %}{% url 'customer-detail' customer.pk %}{% elif preset_parent %}{% url 'customer-detail' preset_parent.pk %}{% else %}{% url 'customer-list' %}{% endif %}" class="btn btn-outline">取消</a>
+        <button type="submit" class="btn btn-primary">
+          <i class="fa-solid fa-floppy-disk"></i> 儲存客戶資料
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  const container = document.getElementById("customerDynamicFieldsContainer");
+  if (container && container.querySelectorAll(".dyn-field-item").length === 0) {
+    container.innerHTML = `<div style="color: var(--text-muted); font-size: 0.85rem; grid-column: 1 / -1;">目前系統尚未設定客戶全域自訂欄位，可點擊右上角「管理全域自訂欄位」前往新增。</div>`;
+  }
+
+  // 上層客戶下拉選單即時關鍵字篩選
+  const searchInput = document.getElementById("parentCustomerSearchInput");
+  const parentSelect = document.getElementById("id_parent");
+  if (searchInput && parentSelect) {
+    const allOptions = Array.from(parentSelect.options).map(opt => ({
+      value: opt.value,
+      text: opt.text,
+    }));
+
+    searchInput.addEventListener("input", function() {
+      const q = this.value.trim().toLowerCase();
+      const currentVal = parentSelect.value;
+      parentSelect.innerHTML = "";
+      allOptions.forEach(item => {
+        if (!item.value || item.value === currentVal || !q || item.text.toLowerCase().includes(q)) {
+          const opt = document.createElement("option");
+          opt.value = item.value;
+          opt.text = item.text;
+          if (item.value === currentVal) opt.selected = true;
+          parentSelect.appendChild(opt);
+        }
+      });
+    });
+  }
+});
+</script>
+{% endblock %}

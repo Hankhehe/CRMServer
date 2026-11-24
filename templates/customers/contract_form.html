@@ -1,0 +1,565 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - CRM Server{% endblock %}
+
+{% block content %}
+<div style="max-width: 980px; margin: 0 auto;">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+    <div style="display: flex; align-items: center; gap: 1rem;">
+      <a href="{% if customer %}{% url 'customer-detail' customer.pk %}{% else %}{% url 'contract-list' %}{% endif %}" class="btn btn-outline btn-sm">
+        <i class="fa-solid fa-arrow-left"></i> 返回
+      </a>
+      <h1 style="font-size: 1.5rem; font-weight: 700; margin: 0;">{{ title }}</h1>
+    </div>
+    {% if contract %}
+      <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+        {% if can_approve_contracts and contract.approval_status == 'pending' %}
+          <form method="post" action="{% url 'contract-approve' contract.pk %}" style="display:inline;" onsubmit="return confirm('確定核准維護保固合約「{{ contract.contract_no }}」正式生效嗎？');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary btn-sm" style="background: #059669; border-color: #059669;">
+              <i class="fa-solid fa-stamp"></i> 核准通過
+            </button>
+          </form>
+          <button type="button" class="btn btn-danger btn-sm" onclick="document.getElementById('contractDetailRejectModal').style.display='flex'">
+            <i class="fa-solid fa-rotate-left"></i> 退回修正
+          </button>
+        {% endif %}
+        {% if contract.approval_status == 'approved' %}
+          <button type="button" class="btn btn-outline btn-sm" data-cert-export="warranty" data-cert-id="{{ contract.pk }}" style="color: #4d7c0f; border-color: rgba(101, 163, 13, 0.45); background: rgba(132, 204, 22, 0.08);">
+            <i class="fa-solid fa-award"></i> 匯出保固證書
+          </button>
+        {% else %}
+          <button type="button" class="btn btn-outline btn-sm" disabled title="此合約尚未覆核通過，無法匯出正式保固證書" style="opacity: 0.5; cursor: not-allowed;">
+            <i class="fa-solid fa-lock"></i> 匯出保固證書 (待覆核)
+          </button>
+        {% endif %}
+        <button type="button" class="btn btn-outline btn-sm" onclick="openRmaModal()" style="border-color: #3b82f6; color: #3b82f6;">
+          <i class="fa-solid fa-arrows-rotate"></i> 設備故障換機 / 退貨精靈 (RMA)
+        </button>
+      </div>
+    {% endif %}
+  </div>
+
+  {% if contract and contract.approval_status == 'pending' %}
+    <div class="card" style="border-left: 4px solid #d97706; background: rgba(245, 158, 11, 0.08); margin-bottom: 1.5rem; padding: 1rem 1.25rem;">
+      <div style="font-weight: 700; color: #b45309; margin-bottom: 0.25rem;">
+        <i class="fa-solid fa-hourglass-half"></i> 此維護保固合約目前為「待覆核」狀態，尚未正式成立
+      </div>
+      <div style="font-size: 0.875rem; color: var(--text-muted);">
+        開單人員：<strong>{{ contract.created_by.username|default:"-" }}</strong> ｜ 未覆核通過前不計入有效維護合約與到期預警，且無法匯出正式保固證書。
+      </div>
+    </div>
+  {% elif contract and contract.approval_status == 'rejected' %}
+    <div class="card" style="border-left: 4px solid #dc2626; background: rgba(239, 68, 68, 0.08); margin-bottom: 1.5rem; padding: 1rem 1.25rem;">
+      <div style="font-weight: 700; color: #dc2626; margin-bottom: 0.35rem;">
+        <i class="fa-solid fa-circle-xmark"></i> 此維護保固合約已被覆核退回（修改並儲存後將自動重新送出覆核）
+      </div>
+      <div style="font-size: 0.9rem; color: #991b1b; margin-bottom: 0.25rem;">
+        <strong>退回原因：</strong>{{ contract.rejection_reason|default:"-" }}
+      </div>
+      <div style="font-size: 0.8rem; color: var(--text-muted);">
+        退回人員：{{ contract.reviewed_by.username|default:"-" }} ｜ 退回時間：{{ contract.reviewed_at|date:"Y-m-d H:i"|default:"-" }}
+      </div>
+    </div>
+  {% elif requires_approval %}
+    <div class="card" style="border-left: 4px solid #d97706; background: rgba(245, 158, 11, 0.07); margin-bottom: 1.5rem; padding: 0.85rem 1.15rem; font-size: 0.875rem; color: #92400e;">
+      <i class="fa-solid fa-stamp"></i> <strong>簽核流程提醒：</strong>目前已啟用「維護保固合約簽核流程」。{% if not contract %}送出後將進入「待覆核」狀態，待主管核准後正式成立。{% else %}若修改核心合約條件（客戶、期間、金額、涵蓋標的等）將轉回「待覆核」；若僅修改備註或上傳附件則維持原核准狀態。{% endif %}
+    </div>
+  {% endif %}
+
+  <div class="card" style="margin-bottom: 2rem;">
+    <form method="post" id="contract-form" enctype="multipart/form-data">
+      {% csrf_token %}
+      
+      <div class="form-group">
+        <label>簽約客戶 <span style="color: #ef4444;">*</span></label>
+        {{ form.customer }}
+        {% if form.customer.errors %}<div style="color: #ef4444; font-size: 0.8rem; margin-top: 4px;">{{ form.customer.errors.0 }}</div>{% endif %}
+        <small style="color: var(--text-muted);">選擇簽約客戶後，系統將自動載入該客戶所購買之軟體授權與持有之設備清單。</small>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;">
+        <div class="form-group">
+          <label>合約編號 <span style="color: #ef4444;">*</span></label>
+          {{ form.contract_no }}
+          {% if form.contract_no.errors %}<div style="color: #ef4444; font-size: 0.8rem; margin-top: 4px;">{{ form.contract_no.errors.0 }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label>合約名稱</label>
+          {{ form.name }}
+          {% if form.name.errors %}<div style="color: #ef4444; font-size: 0.8rem; margin-top: 4px;">{{ form.name.errors.0 }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;">
+        <div class="form-group">
+          <label>合約起日</label>
+          {{ form.start_date }}
+          {% if form.start_date.errors %}<div style="color: #ef4444; font-size: 0.8rem; margin-top: 4px;">{{ form.start_date.errors.0 }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label>合約訖日 (維護到期日) <span style="color: #ef4444;">*</span></label>
+          {{ form.end_date }}
+          {% if form.end_date.errors %}<div style="color: #ef4444; font-size: 0.8rem; margin-top: 4px;">{{ form.end_date.errors.0 }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;">
+        <div class="form-group" style="margin-bottom: 0; padding-top: 0.5rem;">
+          <label style="display: flex; align-items: center; cursor: pointer; font-weight: 600; color: #dc2626;">
+            {{ form.is_terminated }} 終止此合約
+          </label>
+          <div id="statusPreviewContainer" style="margin-top: 0.35rem; font-size: 0.85rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.4rem;">
+            <span>目前狀態預覽：</span>
+            <span id="statusPreviewBadge" class="badge badge-available">生效中</span>
+          </div>
+          {% if form.is_terminated.errors %}<div style="color: #ef4444; font-size: 0.8rem; margin-top: 4px;">{{ form.is_terminated.errors.0 }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label>合約金額 (NTD)</label>
+          {{ form.amount }}
+          {% if form.amount.errors %}<div style="color: #ef4444; font-size: 0.8rem; margin-top: 4px;">{{ form.amount.errors.0 }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>服務等級 (SLA)</label>
+        {{ form.sla_level }}
+        {% if form.sla_level.errors %}<div style="color: #ef4444; font-size: 0.8rem; margin-top: 4px;">{{ form.sla_level.errors.0 }}</div>{% endif %}
+      </div>
+
+      <!-- 涵蓋軟體授權區塊 -->
+      <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--glass-border);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+          <label style="font-weight: 700; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0;">
+            <i class="fa-solid fa-certificate" style="color: #3b82f6;"></i> 涵蓋之客戶軟體產品/授權書
+          </label>
+          <div style="display: flex; gap: 0.5rem;">
+            <button type="button" class="btn btn-outline btn-sm" onclick="toggleCheckAll('licenses', true)" style="font-size: 0.75rem; padding: 2px 8px;">全選</button>
+            <button type="button" class="btn btn-outline btn-sm" onclick="toggleCheckAll('licenses', false)" style="font-size: 0.75rem; padding: 2px 8px;">取消全選</button>
+          </div>
+        </div>
+        {% if form.licenses.errors %}<div style="color: #ef4444; font-size: 0.8rem; margin-bottom: 8px;">{{ form.licenses.errors.0 }}</div>{% endif %}
+
+        <div id="licenses-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.75rem;">
+          {% for choice in form.licenses %}
+            <label class="item-card" style="display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.75rem 1rem; border: 1px solid var(--glass-border); border-radius: 8px; cursor: pointer; background: rgba(255, 255, 255, 0.02); transition: all 0.2s;">
+              <span style="margin-top: 2px;">{{ choice.tag }}</span>
+              <div style="font-size: 0.9rem; line-height: 1.4;">
+                <div style="font-weight: 600;">{{ choice.choice_label }}</div>
+              </div>
+            </label>
+          {% empty %}
+            <div id="no-licenses-msg" style="grid-column: 1 / -1; padding: 1.5rem; text-align: center; color: var(--text-muted); border: 1px dashed var(--glass-border); border-radius: 8px;">
+              {% if customer %}此客戶尚無採購軟體授權書紀錄{% else %}請先在上方選擇簽約客戶{% endif %}
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- 涵蓋設備 (Probe) 區塊 -->
+      <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--glass-border);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+          <label style="font-weight: 700; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0;">
+            <i class="fa-solid fa-server" style="color: #10b981;"></i> 涵蓋之硬體設備 (Probe)
+          </label>
+          <div style="display: flex; gap: 0.5rem;">
+            <button type="button" class="btn btn-outline btn-sm" onclick="toggleCheckAll('probes', true)" style="font-size: 0.75rem; padding: 2px 8px;">全選</button>
+            <button type="button" class="btn btn-outline btn-sm" onclick="toggleCheckAll('probes', false)" style="font-size: 0.75rem; padding: 2px 8px;">取消全選</button>
+          </div>
+        </div>
+        {% if form.probes.errors %}<div style="color: #ef4444; font-size: 0.8rem; margin-bottom: 8px;">{{ form.probes.errors.0 }}</div>{% endif %}
+
+        <div id="probes-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.75rem;">
+          {% for choice in form.probes %}
+            <label class="item-card" style="display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.75rem 1rem; border: 1px solid var(--glass-border); border-radius: 8px; cursor: pointer; background: rgba(255, 255, 255, 0.02); transition: all 0.2s;">
+              <span style="margin-top: 2px;">{{ choice.tag }}</span>
+              <div style="font-size: 0.9rem; line-height: 1.4;">
+                <div style="font-weight: 600;">{{ choice.choice_label }}</div>
+              </div>
+            </label>
+          {% empty %}
+            <div id="no-probes-msg" style="grid-column: 1 / -1; padding: 1.5rem; text-align: center; color: var(--text-muted); border: 1px dashed var(--glass-border); border-radius: 8px;">
+              {% if customer %}此客戶目前尚無出貨或借測中之設備{% else %}請先在上方選擇簽約客戶{% endif %}
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-top: 1.5rem;">
+        <label>合約備註說明</label>
+        {{ form.note }}
+        {% if form.note.errors %}<div style="color: #ef4444; font-size: 0.8rem; margin-top: 4px;">{{ form.note.errors.0 }}</div>{% endif %}
+      </div>
+
+      <div class="form-group" style="margin-top: 1.5rem;">
+        <label style="display: flex; align-items: center; gap: 0.5rem; font-weight: 600;">
+          <i class="fa-solid fa-paperclip" style="color: #6366f1;"></i> 上傳合約附件 (PDF / 圖片 / 文件，可多選)
+        </label>
+        <input type="file" name="attachments" multiple class="form-control" accept=".pdf,.png,.jpg,.jpeg,.gif,.doc,.docx,.xls,.xlsx">
+        <small style="color: var(--text-muted);">支援多選上傳。所有合約檔案將統一存放於伺服器 <code>media/contracts/</code> 目錄，利於日常存取與系統整體備份。</small>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--glass-border);">
+        <a href="{% if customer %}{% url 'customer-detail' customer.pk %}{% else %}{% url 'contract-list' %}{% endif %}" class="btn btn-outline">取消</a>
+        <button type="submit" class="btn btn-primary">儲存合約資料</button>
+      </div>
+    </form>
+  </div>
+
+  {% if contract %}
+    <!-- 合約附件管理 (Contract Attachments) -->
+    <div class="card" style="margin-bottom: 2rem;">
+      <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <div class="card-title" style="font-size: 1.15rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">
+          <i class="fa-solid fa-folder-open" style="color: #0284c7;"></i> 合約檔案與簽核附件
+        </div>
+        <span class="badge badge-secondary">{{ attachments|length }} 個檔案</span>
+      </div>
+
+      <!-- Quick Upload Box -->
+      <form action="{% url 'contract-attachment-upload' contract.pk %}" method="post" enctype="multipart/form-data" style="margin-bottom: 1.25rem; background: #f8fafc; padding: 1rem; border-radius: 8px; border: 1px dashed var(--glass-border); display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+        {% csrf_token %}
+        <div style="flex: 1; min-width: 250px;">
+          <label style="font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem; display: block;">直接追加上傳新附件：</label>
+          <input type="file" name="attachments" multiple class="form-control" style="font-size: 0.85rem; padding: 0.35rem 0.6rem;" required>
+        </div>
+        <button type="submit" class="btn btn-outline btn-sm" style="margin-top: 1.25rem;">
+          <i class="fa-solid fa-upload"></i> 上傳附件
+        </button>
+      </form>
+
+      {% if attachments %}
+        <div class="table-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th>檔案名稱</th>
+                <th>大小</th>
+                <th>上傳時間</th>
+                <th>上傳人員</th>
+                <th style="text-align: right;">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for att in attachments %}
+                <tr>
+                  <td>
+                    <div style="display: flex; align-items: center; gap: 0.6rem;">
+                      {% if att.is_pdf %}
+                        <i class="fa-solid fa-file-pdf" style="color: #ef4444; font-size: 1.25rem;"></i>
+                      {% elif att.is_image %}
+                        <i class="fa-solid fa-file-image" style="color: #10b981; font-size: 1.25rem;"></i>
+                      {% else %}
+                        <i class="fa-solid fa-file" style="color: #64748b; font-size: 1.25rem;"></i>
+                      {% endif %}
+                      <a href="{{ att.file.url }}" target="_blank" style="font-weight: 600; color: var(--primary); text-decoration: none;">
+                        {{ att.filename }}
+                      </a>
+                    </div>
+                  </td>
+                  <td style="font-size: 0.85rem; color: var(--text-muted);">{{ att.formatted_size }}</td>
+                  <td style="font-size: 0.85rem; color: var(--text-muted);">{{ att.uploaded_at|date:"Y-m-d H:i" }}</td>
+                  <td style="font-size: 0.85rem;">{{ att.uploaded_by.username|default:"系統" }}</td>
+                  <td style="text-align: right;">
+                    <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                      <a href="{{ att.file.url }}" target="_blank" class="btn btn-outline btn-sm" title="下載/檢視">
+                        <i class="fa-solid fa-download"></i>
+                      </a>
+                      <form action="{% url 'contract-attachment-delete' att.pk %}" method="post" style="display: inline;" onsubmit="return confirm('確定要刪除附件「{{ att.filename }}」嗎？');">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-outline btn-sm" style="color: #ef4444; border-color: rgba(239, 68, 68, 0.3);" title="刪除">
+                          <i class="fa-solid fa-trash"></i>
+                        </button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div style="padding: 1.5rem; text-align: center; color: var(--text-muted); font-size: 0.9rem;">
+          <i class="fa-solid fa-paperclip" style="margin-right: 4px;"></i> 此合約尚未上傳任何文件附件
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- 合約設備退換貨歷史紀錄 (RMA History) -->
+    <div class="card">
+      <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <div class="card-title" style="font-size: 1.15rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">
+          <i class="fa-solid fa-history" style="color: #6366f1;"></i> 合約設備退換貨歷程 (RMA Logs)
+        </div>
+        <span class="badge badge-secondary">{{ replacement_logs|length }} 筆異動</span>
+      </div>
+      {% if replacement_logs %}
+        <div class="table-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th>異動時間</th>
+                <th>類型</th>
+                <th>換下/退回設備</th>
+                <th>換上新設備</th>
+                <th>原因說明</th>
+                <th>經手人員</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for log in replacement_logs %}
+                <tr>
+                  <td style="font-size: 0.85rem; color: var(--text-muted);">{{ log.replaced_at|date:"Y-m-d H:i" }}</td>
+                  <td>
+                    {% if log.action_type == 'replace' %}
+                      <span class="badge badge-available">故障換機</span>
+                    {% else %}
+                      <span class="badge badge-scrapped">設備退回</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <strong>{{ log.old_probe_code }}</strong>
+                  </td>
+                  <td>
+                    {% if log.new_probe_code %}
+                      <strong style="color: #10b981;">{{ log.new_probe_code }}</strong>
+                    {% else %}
+                      <span style="color: var(--text-muted);">-</span>
+                    {% endif %}
+                  </td>
+                  <td style="font-size: 0.85rem; max-width: 250px;">{{ log.reason|linebreaksbr }}</td>
+                  <td style="font-size: 0.85rem;">{{ log.performed_by.username|default:"系統" }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div style="padding: 2rem; text-align: center; color: var(--text-muted);">
+          本合約目前尚無設備退換貨歷史紀錄
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- RMA Modal -->
+    <div id="rma-modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 1000; align-items: center; justify-content: center;">
+      <div class="card" style="width: 100%; max-width: 580px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; border-bottom: 1px solid var(--glass-border); padding-bottom: 0.75rem;">
+          <h2 style="font-size: 1.25rem; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+            <i class="fa-solid fa-arrows-rotate" style="color: #3b82f6;"></i> 合約設備退換貨精靈 (RMA)
+          </h2>
+          <button type="button" onclick="closeRmaModal()" style="background: none; border: none; font-size: 1.25rem; color: var(--text-muted); cursor: pointer;">&times;</button>
+        </div>
+
+        <form method="post" action="{% url 'contract-swap-probe' contract.pk %}">
+          {% csrf_token %}
+          <div class="form-group">
+            <label>異動類型 <span style="color: #ef4444;">*</span></label>
+            {{ rma_form.action_type }}
+          </div>
+
+          <div class="form-group">
+            <label>欲換下或退回之設備 (合約內現有設備) <span style="color: #ef4444;">*</span></label>
+            {{ rma_form.old_probe }}
+            <small style="color: var(--text-muted);">換下後設備將解除客戶歸屬並自動轉回「庫存中 (available)」以利後續檢驗。</small>
+          </div>
+
+          <div class="form-group" id="rma-new-probe-group">
+            <label>換上新設備 (在庫可用備品) <span style="color: #ef4444;">*</span></label>
+            {{ rma_form.new_probe }}
+            <small style="color: var(--text-muted);">新設備將自動出貨歸屬該客戶，並替換納入本維護合約中。</small>
+          </div>
+
+          <div class="form-group">
+            <label>故障原因與更換說明 <span style="color: #ef4444;">*</span></label>
+            {{ rma_form.reason }}
+          </div>
+
+          <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--glass-border);">
+            <button type="button" class="btn btn-outline" onclick="closeRmaModal()">取消</button>
+            <button type="submit" class="btn btn-primary" style="background: #2563eb;">確認執行更換</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+</div>
+
+<script>
+function toggleCheckAll(fieldName, checked) {
+  const container = document.getElementById(fieldName + '-container');
+  if (!container) return;
+  const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+  checkboxes.forEach(cb => { cb.checked = checked; });
+}
+
+function openRmaModal() {
+  const modal = document.getElementById('rma-modal');
+  if (modal) {
+    modal.style.display = 'flex';
+  }
+}
+
+function closeRmaModal() {
+  const modal = document.getElementById('rma-modal');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+}
+
+// 監聽 RMA 異動類型改變
+document.addEventListener('DOMContentLoaded', function() {
+  const isTerminatedCheckbox = document.getElementById('id_is_terminated');
+  const startDateInput = document.getElementById('id_start_date');
+  const endDateInput = document.getElementById('id_end_date');
+  const statusPreviewBadge = document.getElementById('statusPreviewBadge');
+
+  function getTodayString() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  function updateStatusPreview() {
+    if (!statusPreviewBadge) return;
+
+    if (isTerminatedCheckbox && isTerminatedCheckbox.checked) {
+      statusPreviewBadge.className = 'badge badge-secondary';
+      statusPreviewBadge.textContent = '已終止';
+      return;
+    }
+
+    const todayStr = getTodayString();
+    const startDateVal = startDateInput ? startDateInput.value : '';
+    const endDateVal = endDateInput ? endDateInput.value : '';
+
+    if (startDateVal && startDateVal > todayStr) {
+      statusPreviewBadge.className = 'badge badge-secondary';
+      statusPreviewBadge.textContent = '待生效';
+      return;
+    }
+
+    if (endDateVal && endDateVal < todayStr) {
+      statusPreviewBadge.className = 'badge badge-scrapped';
+      statusPreviewBadge.textContent = '已到期';
+      return;
+    }
+
+    statusPreviewBadge.className = 'badge badge-available';
+    statusPreviewBadge.textContent = '生效中';
+  }
+
+  if (isTerminatedCheckbox) {
+    isTerminatedCheckbox.addEventListener('change', updateStatusPreview);
+  }
+  if (startDateInput) {
+    startDateInput.addEventListener('change', updateStatusPreview);
+    startDateInput.addEventListener('input', updateStatusPreview);
+  }
+  if (endDateInput) {
+    endDateInput.addEventListener('change', updateStatusPreview);
+    endDateInput.addEventListener('input', updateStatusPreview);
+  }
+  updateStatusPreview();
+
+  const rmaActionSelect = document.getElementById('rma-action-type');
+  const newProbeGroup = document.getElementById('rma-new-probe-group');
+  if (rmaActionSelect && newProbeGroup) {
+    rmaActionSelect.addEventListener('change', function() {
+      if (this.value === 'return') {
+        newProbeGroup.style.display = 'none';
+      } else {
+        newProbeGroup.style.display = 'block';
+      }
+    });
+  }
+
+  // 監聽客戶選擇切換動態載入授權與設備
+  const customerSelect = document.getElementById('id_customer');
+  if (customerSelect) {
+    customerSelect.addEventListener('change', function() {
+      const customerId = this.value;
+      if (!customerId) {
+        document.getElementById('licenses-container').innerHTML = '<div style="grid-column: 1 / -1; padding: 1.5rem; text-align: center; color: var(--text-muted); border: 1px dashed var(--glass-border); border-radius: 8px;">請先在上方選擇簽約客戶</div>';
+        document.getElementById('probes-container').innerHTML = '<div style="grid-column: 1 / -1; padding: 1.5rem; text-align: center; color: var(--text-muted); border: 1px dashed var(--glass-border); border-radius: 8px;">請先在上方選擇簽約客戶</div>';
+        return;
+      }
+
+      fetch(`/customers/api/customers/${customerId}/contract-candidates/`)
+        .then(res => res.json())
+        .then(data => {
+          // 渲染 Licenses
+          const licContainer = document.getElementById('licenses-container');
+          if (data.licenses.length === 0) {
+            licContainer.innerHTML = '<div style="grid-column: 1 / -1; padding: 1.5rem; text-align: center; color: var(--text-muted); border: 1px dashed var(--glass-border); border-radius: 8px;">此客戶尚無採購軟體授權書紀錄</div>';
+          } else {
+            let licHtml = '';
+            data.licenses.forEach(lic => {
+              licHtml += `
+                <label class="item-card" style="display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.75rem 1rem; border: 1px solid var(--glass-border); border-radius: 8px; cursor: pointer; background: rgba(255, 255, 255, 0.02); transition: all 0.2s;">
+                  <span style="margin-top: 2px;"><input type="checkbox" name="licenses" value="${lic.id}"></span>
+                  <div style="font-size: 0.9rem; line-height: 1.4;">
+                    <div style="font-weight: 600;">${lic.license_no} - ${lic.product_name}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">數量: ${lic.quantity} ${lic.unit} | 效期: ${lic.end_date}</div>
+                  </div>
+                </label>
+              `;
+            });
+            licContainer.innerHTML = licHtml;
+          }
+
+          // 渲染 Probes
+          const probeContainer = document.getElementById('probes-container');
+          if (data.probes.length === 0) {
+            probeContainer.innerHTML = '<div style="grid-column: 1 / -1; padding: 1.5rem; text-align: center; color: var(--text-muted); border: 1px dashed var(--glass-border); border-radius: 8px;">此客戶目前尚無出貨或借測中之設備</div>';
+          } else {
+            let probeHtml = '';
+            data.probes.forEach(p => {
+              probeHtml += `
+                <label class="item-card" style="display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.75rem 1rem; border: 1px solid var(--glass-border); border-radius: 8px; cursor: pointer; background: rgba(255, 255, 255, 0.02); transition: all 0.2s;">
+                  <span style="margin-top: 2px;"><input type="checkbox" name="probes" value="${p.id}"></span>
+                  <div style="font-size: 0.9rem; line-height: 1.4;">
+                    <div style="font-weight: 600;">${p.code} (${p.model_name})</div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">狀態: ${p.status_display} ${p.bound_license ? '| 綁定: ' + p.bound_license : ''}</div>
+                  </div>
+                </label>
+              `;
+            });
+            probeContainer.innerHTML = probeHtml;
+          }
+        })
+        .catch(err => {
+          console.error("載入客戶候選標的失敗:", err);
+        });
+    });
+  }
+});
+</script>
+
+{% if contract and can_approve_contracts and contract.approval_status == 'pending' %}
+<div id="contractDetailRejectModal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.55); z-index:9999; align-items:center; justify-content:center; padding:1rem;">
+  <div class="card" style="width:100%; max-width:480px; margin:0;">
+    <h3 style="font-size:1.15rem; font-weight:700; margin-bottom:0.5rem; color:#dc2626;">
+      <i class="fa-solid fa-rotate-left"></i> 退回維護保固合約：{{ contract.contract_no }}
+    </h3>
+    <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem;">
+      請填寫退回原因，系統將把此合約標記為「已退回」並通知原開單人員修改後重新送審：
+    </p>
+    <form method="post" action="{% url 'contract-reject' contract.pk %}">
+      {% csrf_token %}
+      <div class="form-group">
+        <label>退回原因說明 <span style="color:#dc2626;">*</span></label>
+        <textarea name="rejection_reason" class="form-control" rows="3" required placeholder="請說明需修正之處..."></textarea>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:1rem;">
+        <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('contractDetailRejectModal').style.display='none'">取消</button>
+        <button type="submit" class="btn btn-danger btn-sm"><i class="fa-solid fa-paper-plane"></i> 確認退回</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

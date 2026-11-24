@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}確認設備退貨/歸還 - {{ device.code }} - CRM Server{% endblock %}
+
+{% block content %}
+<div style="max-width: 650px; margin: 2rem auto;">
+  <div class="card" style="border-top: 4px solid #ea580c;">
+    <div class="card-header">
+      <div class="card-title" style="color: #c2410c;">
+        <i class="fa-solid fa-arrow-rotate-left"></i> 確認硬體設備退貨 / 歸還入庫
+      </div>
+    </div>
+    <div style="padding: 1.25rem 0;">
+      <p style="font-size: 1.05rem; margin-bottom: 1.25rem; color: var(--text-main);">
+        您正在為客戶 <strong>{{ customer.name }}</strong> 辦理設備退貨入庫作業。
+      </p>
+
+      <div style="background: #f8fafc; padding: 1.25rem; border-radius: 8px; margin-bottom: 1.5rem; border: 1px solid var(--glass-border); line-height: 1.8;">
+        <div><strong>設備序號：</strong> <span style="font-family: monospace; font-weight: 700;">{{ device.code }}</span></div>
+        <div><strong>設備型號：</strong> {{ device.model.name }}</div>
+        <div><strong>目前狀態：</strong> 
+          {% if device.status == 'shipped' %}
+            <span class="badge badge-shipped">已出貨 (出貨退貨)</span>
+          {% elif device.status == 'loaned' %}
+            <span class="badge badge-loaned">借測中 (借測歸還)</span>
+          {% else %}
+            <span class="badge badge-secondary">{{ device.get_status_display }}</span>
+          {% endif %}
+        </div>
+        <div><strong>持有客戶：</strong> {{ customer.name }} ({{ customer.code }})</div>
+        {% if device.expected_return_at %}
+          <div><strong>原預計歸還日：</strong> {{ device.expected_return_at|date:"Y-m-d" }}</div>
+        {% endif %}
+      </div>
+
+      <form method="post">
+        {% csrf_token %}
+        {% if next %}
+          <input type="hidden" name="next" value="{{ next }}">
+        {% endif %}
+
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+          <label style="font-weight: 600; display: block; margin-bottom: 0.35rem;">退貨說明與備註 (選填)</label>
+          <textarea name="note" class="form-control" rows="3" placeholder="請填寫退貨原因或檢核情況，留空將使用系統預設備註"></textarea>
+        </div>
+
+        <div style="background: rgba(234, 88, 12, 0.08); padding: 0.75rem 1rem; border-radius: 6px; margin-bottom: 1.5rem; font-size: 0.875rem; color: #9a3412;">
+          <i class="fa-solid fa-circle-info"></i> 確認退貨後，設備狀態將恢復為「庫存中」，解除該客戶持有，並自動記錄庫存退貨異動日誌。
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+          <a href="{% if next %}{{ next }}{% elif customer %}{% url 'customer-detail' customer.pk %}{% else %}{% url 'hardware-detail' device.pk %}{% endif %}" class="btn btn-outline">
+            取消返回
+          </a>
+          <button type="submit" class="btn btn-primary" style="background: #ea580c; border-color: #ea580c;">
+            <i class="fa-solid fa-check"></i> 確認退貨入庫
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

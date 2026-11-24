@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}確認刪除產品 - CRM Server{% endblock %}
+
+{% block content %}
+<div style="max-width: 600px; margin: 2rem auto;">
+  <div class="card" style="border-top: 4px solid #ef4444;">
+    <div class="card-header">
+      <div class="card-title" style="color: #dc2626;">
+        <i class="fa-solid fa-triangle-exclamation"></i> 確認刪除軟體產品主檔
+      </div>
+    </div>
+    <div style="padding: 1rem 0;">
+      <p style="font-size: 1.05rem; margin-bottom: 1rem;">
+        您確定要刪除產品 <strong>{{ product.name }} ({{ product.code }})</strong> 嗎？
+      </p>
+      <div style="background: #f8fafc; padding: 1rem; border-radius: 8px; margin-bottom: 1.25rem;">
+        <div><strong>產品代碼：</strong> {{ product.code }}</div>
+        <div><strong>有效客戶授權數：</strong> {{ product.licenses.count }} 份</div>
+      </div>
+      <p style="color: #dc2626; font-size: 0.875rem;">
+        <i class="fa-solid fa-circle-exclamation"></i> 警告：刪除此產品主檔後將無法復原！
+      </p>
+    </div>
+    <form method="post" style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+      {% csrf_token %}
+      <a href="{% url 'product-list' %}" class="btn btn-outline">
+        取消
+      </a>
+      <button type="submit" class="btn btn-danger">
+        <i class="fa-solid fa-trash"></i> 確認刪除
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}

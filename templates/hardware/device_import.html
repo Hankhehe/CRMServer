@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+
+{% block title %}匯入硬體設備庫存 - CRM Server{% endblock %}
+
+{% block content %}
+<div style="max-width: 1020px; margin: 0 auto;">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+    <div style="display: flex; align-items: center; gap: 1rem;">
+      <a href="{% url 'hardware-list' %}" class="btn btn-outline btn-sm">
+        <i class="fa-solid fa-arrow-left"></i> 返回設備庫存
+      </a>
+      <div>
+        <h1 style="font-size: 1.5rem; font-weight: 700; margin-bottom: 0.15rem;">批次匯入硬體設備庫存</h1>
+        <p style="color: var(--text-muted); font-size: 0.9rem; margin: 0;">支援透過動態智慧 Excel (.xlsx) 範本批次建立庫存、出貨狀態與單機客製規格覆寫</p>
+      </div>
+    </div>
+
+    <a href="{% url 'hardware-import-template' %}" class="btn btn-outline" style="display: inline-flex; align-items: center; gap: 0.5rem; border-color: #10b981; color: #059669; font-weight: 600;">
+      <i class="fa-solid fa-download"></i> 下載硬體匯入範本 (.xlsx)
+    </a>
+  </div>
+
+  <!-- 錯誤清單區塊 (All-or-Nothing 檢核未通過時顯示) -->
+  {% if error_list %}
+    <div class="card" style="margin-bottom: 1.5rem; border: 1px solid rgba(239, 68, 68, 0.4); background: rgba(254, 242, 242, 0.7);">
+      <div style="display: flex; align-items: center; gap: 0.65rem; margin-bottom: 0.75rem; color: #dc2626;">
+        <i class="fa-solid fa-circle-exclamation" style="font-size: 1.25rem;"></i>
+        <h3 style="font-size: 1.05rem; font-weight: 700; margin: 0;">
+          匯入檢核未通過（共發現 {{ error_list|length }} 項問題，本次未寫入任何資料）
+        </h3>
+      </div>
+      <p style="font-size: 0.875rem; color: #991b1b; margin-bottom: 1rem;">
+        為確保庫存與交易紀錄完整性，系統採「全部成功才寫入」機制。請根據下方錯誤列號修正檔案後重新上傳：
+      </p>
+      <div class="table-responsive" style="background: #ffffff; border-radius: 8px; border: 1px solid #fecaca;">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 120px;">發生位置</th>
+              <th style="width: 180px;">設備序號</th>
+              <th>錯誤原因與修正說明</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for err in error_list %}
+              <tr>
+                <td><span class="badge badge-scrapped">{{ err.row }}</span></td>
+                <td><strong style="font-family: monospace;">{{ err.code }}</strong></td>
+                <td style="color: #b91c1c; font-weight: 500;">{{ err.message }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- 上傳表單卡片 -->
+  <div class="card" style="margin-bottom: 1.5rem;">
+    <h3 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem;">
+      <i class="fa-solid fa-cloud-arrow-up" style="color: var(--primary);"></i> 步驟 1：選擇檔案並執行匯入
+    </h3>
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <div class="form-group">
+        <label for="{{ form.file.id_for_label }}">{{ form.file.label }} <span style="color: #ef4444;">*</span></label>
+        {{ form.file }}
+        {% if form.file.help_text %}
+          <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.35rem;">{{ form.file.help_text }}</div>
+        {% endif %}
+        {% if form.file.errors %}
+          <div style="color: #ef4444; font-size: 0.85rem; margin-top: 0.35rem;">{{ form.file.errors.0 }}</div>
+        {% endif %}
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--glass-border);">
+        <a href="{% url 'hardware-list' %}" class="btn btn-outline">取消</a>
+        <button type="submit" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 0.5rem;">
+          <i class="fa-solid fa-file-import"></i> 開始驗證並匯入
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- 欄位說明與規則卡片 -->
+  <div class="card" style="margin-bottom: 1.5rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+      <h3 style="font-size: 1.1rem; font-weight: 600; margin: 0;">
+        <i class="fa-solid fa-circle-info" style="color: var(--primary);"></i> 欄位填寫說明與匯入規則
+      </h3>
+      <span style="font-size: 0.8rem; color: var(--text-muted);">
+        提示：範本內含第 2 分頁「系統代碼對照與填寫說明」及下拉選單，亦可直接修改匯出之 Excel 原檔重新匯入
+      </span>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; margin-bottom: 1.25rem;">
+      <div style="background: #f8fafc; padding: 0.85rem 1rem; border-radius: 8px; border-left: 4px solid #3b82f6;">
+        <div style="font-weight: 700; font-size: 0.9rem; margin-bottom: 0.25rem; color: #1e3a8a;">型號與供應商嚴格驗證</div>
+        <div style="font-size: 0.82rem; color: var(--text-muted);">
+          檔案中的「設備型號名稱」與選填的「進貨供應商」必須已存在於系統中；若尚未建立，請先至型號/供應商管理新增。
+        </div>
+      </div>
+      <div style="background: #f8fafc; padding: 0.85rem 1rem; border-radius: 8px; border-left: 4px solid #10b981;">
+        <div style="font-weight: 700; font-size: 0.9rem; margin-bottom: 0.25rem; color: #065f46;">自動產生進銷存交易紀錄</div>
+        <div style="font-size: 0.82rem; color: var(--text-muted);">
+          新匯入序號將自動建立「進貨入庫」紀錄；若狀態設為「已出貨」或「借測中」或既有設備狀態變更，系統亦會自動補齊對應之出貨/借測異動紀錄。
+        </div>
+      </div>
+      <div style="background: #f8fafc; padding: 0.85rem 1rem; border-radius: 8px; border-left: 4px solid #8b5cf6;">
+        <div style="font-weight: 700; font-size: 0.9rem; margin-bottom: 0.25rem; color: #5b21b6;">支援單機與自訂規格覆寫</div>
+        <div style="font-size: 0.82rem; color: var(--text-muted);">
+          連接埠數、CPU、記憶體、硬碟與 <code>自訂: 欄位名稱</code> 若留空，即自動繼承該型號的預設規格；若有填寫且與預設不同，則儲存為單機覆寫值。
+        </div>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 190px;">欄位名稱</th>
+            <th style="width: 110px;">必填要求</th>
+            <th>填寫規則與說明</th>
+            <th style="width: 180px;">填寫範例</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>設備序號/資產編號</strong></td>
+            <td><span class="badge badge-scrapped">必填 *</span></td>
+            <td>全系統唯一設備序號。若序號已存在則更新既有設備；若為新序號則新增設備。</td>
+            <td><code>SN-2026-0001</code></td>
+          </tr>
+          <tr>
+            <td><strong>設備型號名稱</strong></td>
+            <td><span class="badge badge-scrapped">必填 *</span></td>
+            <td>可填寫系統已存在的「型號名稱」或「型號代碼」（參考下方對照表）。</td>
+            <td><code>PIXIS 1000G</code></td>
+          </tr>
+          <tr>
+            <td>進銷存狀態</td>
+            <td><span class="badge badge-secondary">選填</span></td>
+            <td>可填：<code>庫存中</code>、<code>已出貨</code>、<code>借測中</code>、<code>已報廢</code>（或英文代碼）。留空預設為「庫存中」。</td>
+            <td><code>庫存中</code> 或 <code>已出貨</code></td>
+          </tr>
+          <tr>
+            <td>購買/關聯客戶代號</td>
+            <td><span class="badge badge-loaned">條件必填</span></td>
+            <td>當狀態為「<strong>已出貨</strong>」或「<strong>借測中</strong>」時必填！可填系統已存在的「客戶代號」或「客戶名稱」。</td>
+            <td><code>80123456</code></td>
+          </tr>
+          <tr>
+            <td>進貨供應商</td>
+            <td><span class="badge badge-secondary">選填</span></td>
+            <td>可填系統已存在的「供應商名稱」或「供應商代號」。留空則自動繼承該型號的預設供應商。</td>
+            <td>原廠名稱（或留空）</td>
+          </tr>
+          <tr>
+            <td>購入/進貨日</td>
+            <td><span class="badge badge-secondary">選填</span></td>
+            <td>進貨日期，格式 <code>YYYY-MM-DD</code>。</td>
+            <td><code>2026-10-01</code></td>
+          </tr>
+          <tr>
+            <td>預計歸還日</td>
+            <td><span class="badge badge-loaned">條件必填</span></td>
+            <td>當狀態為「<strong>借測中</strong>」時必填！格式 <code>YYYY-MM-DD</code>。</td>
+            <td><code>2026-12-31</code></td>
+          </tr>
+          <tr>
+            <td>網路連接埠數 / CPU / 記憶體 / 硬碟空間</td>
+            <td><span class="badge badge-secondary">選填</span></td>
+            <td>單機基礎規格覆寫。留空即自動繼承型號標準規格。</td>
+            <td>留空繼承預設</td>
+          </tr>
+          <tr>
+            <td><code>自訂: &lt;規格名稱&gt;</code></td>
+            <td><span class="badge badge-secondary">選填</span></td>
+            <td>各型號定義之動態自訂規格覆寫欄位（範本會自動展開所有自訂欄位表頭）。留空則繼承型號預設。</td>
+            <td>留空繼承預設</td>
+          </tr>
+          <tr>
+            <td>備註說明</td>
+            <td><span class="badge badge-secondary">選填</span></td>
+            <td>設備備註說明。</td>
+            <td>機房備品</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 系統現有型號與供應商快速參考 -->
+  <div style="display: grid; grid-template-columns: 1.4fr 1fr; gap: 1.25rem;">
+    <div class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+        <h3 style="font-size: 1rem; font-weight: 600; margin: 0;">
+          <i class="fa-solid fa-server" style="color: var(--primary);"></i> 系統現有「硬體規格型號」對照表 ({{ models|length }})
+        </h3>
+        <a href="{% url 'hardware-models' %}" style="font-size: 0.8rem; color: var(--primary); text-decoration: none;">前往管理型號 &rarr;</a>
+      </div>
+      <div class="table-responsive" style="max-height: 260px; overflow-y: auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>型號名稱</th>
+              <th>型號代碼</th>
+              <th>預設供應商</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for m in models %}
+              <tr>
+                <td><strong>{{ m.name }}</strong></td>
+                <td><code style="font-size: 0.8rem;">{{ m.model_code }}</code></td>
+                <td>{{ m.supplier.name|default:"-" }}</td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="3" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">尚無型號，請先建立規格型號</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+        <h3 style="font-size: 1rem; font-weight: 600; margin: 0;">
+          <i class="fa-solid fa-truck-field" style="color: var(--primary);"></i> 系統現有「供應商」對照表 ({{ suppliers|length }})
+        </h3>
+        <a href="{% url 'hardware-suppliers' %}" style="font-size: 0.8rem; color: var(--primary); text-decoration: none;">前往管理供應商 &rarr;</a>
+      </div>
+      <div class="table-responsive" style="max-height: 260px; overflow-y: auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>供應商名稱</th>
+              <th>供應商代號</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in suppliers %}
+              <tr>
+                <td><strong>{{ s.name }}</strong></td>
+                <td><code style="font-size: 0.8rem;">{{ s.supplier_code }}</code></td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="2" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">尚無供應商資料</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

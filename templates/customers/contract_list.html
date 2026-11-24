@@ -1,0 +1,344 @@
+{% extends "base.html" %}
+
+{% block title %}維護合約預警中心 - CRM Server{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 0.75rem;">
+  <div>
+    <h1 style="font-size: 1.75rem; font-weight: 700; margin-bottom: 0.25rem;">維護合約預警中心</h1>
+    <p style="color: var(--text-muted); font-size: 0.95rem;">追蹤客戶維護合約狀態、到期日倒數、簽核覆核與續約提醒</p>
+  </div>
+  {% if can_edit_licenses %}
+    <a href="{% url 'contract-create' %}" class="btn btn-primary">
+      <i class="fa-solid fa-plus"></i> 新增維護合約
+    </a>
+  {% endif %}
+</div>
+
+<!-- Search Bar & Date Range Filters -->
+<div class="card" style="padding: 1rem 1.25rem; margin-bottom: 1.25rem;">
+  <form method="get" style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+    <input type="hidden" name="filter" value="{{ filter_type }}">
+
+    <div style="flex: 1; min-width: 240px; position: relative;">
+      <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: var(--text-muted);"></i>
+      <input type="text" name="search" value="{{ search }}" class="form-control" style="padding-left: 2.5rem;" placeholder="搜尋合約編號、合約名稱、客戶代號或客戶名稱...">
+    </div>
+
+    <div style="min-width: 140px;">
+      <select name="approval" class="form-control">
+        <option value="">-- 覆核篩選 --</option>
+        <option value="pending" {% if approval_filter == "pending" %}selected{% endif %}>待覆核 ({{ pending_approval_count }})</option>
+        <option value="rejected" {% if approval_filter == "rejected" %}selected{% endif %}>已退回 ({{ rejected_approval_count }})</option>
+        <option value="approved" {% if approval_filter == "approved" %}selected{% endif %}>已核准</option>
+      </select>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+      <span style="font-size: 0.85rem; font-weight: 500; color: var(--text-muted); display: inline-flex; align-items: center; gap: 0.35rem;">
+        <i class="fa-regular fa-calendar-days"></i> 合約期間:
+      </span>
+      <input type="date" name="date_from" value="{{ date_from }}" class="form-control" style="width: auto;" title="起始日期">
+      <span style="color: var(--text-muted);">~</span>
+      <input type="date" name="date_to" value="{{ date_to }}" class="form-control" style="width: auto;" title="結束日期">
+    </div>
+
+    <div style="display: flex; gap: 0.5rem;">
+      <button type="submit" class="btn btn-primary btn-sm">
+        <i class="fa-solid fa-filter"></i> 篩選
+      </button>
+      {% if search or date_from or date_to or approval_filter %}
+        <a href="{% url 'contract-list' %}?filter={{ filter_type }}" class="btn btn-outline btn-sm" title="清除搜尋條件">
+          <i class="fa-solid fa-xmark"></i> 清除
+        </a>
+      {% endif %}
+    </div>
+  </form>
+</div>
+
+<!-- Filter Tabs -->
+<div style="display: flex; gap: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap;">
+  <a href="{% url 'contract-list' %}?filter=all{% if search %}&search={{ search|urlencode }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="btn {% if filter_type == 'all' and not approval_filter %}btn-primary{% else %}btn-outline{% endif %} btn-sm">
+    全部合約
+  </a>
+  <a href="{% url 'contract-list' %}?approval=pending" class="btn {% if approval_filter == 'pending' or filter_type == 'approval_pending' %}btn-primary{% else %}btn-outline{% endif %} btn-sm" style="{% if approval_filter != 'pending' and filter_type != 'approval_pending' %}color: #d97706; border-color: rgba(217, 119, 6, 0.4);{% endif %}">
+    <i class="fa-solid fa-stamp"></i> 待覆核 ({{ pending_approval_count }})
+  </a>
+  {% if rejected_approval_count > 0 or approval_filter == 'rejected' %}
+    <a href="{% url 'contract-list' %}?approval=rejected" class="btn {% if approval_filter == 'rejected' %}btn-danger{% else %}btn-outline{% endif %} btn-sm" style="{% if approval_filter != 'rejected' %}color: #dc2626; border-color: rgba(220, 38, 38, 0.4);{% endif %}">
+      <i class="fa-solid fa-rotate-left"></i> 已退回 ({{ rejected_approval_count }})
+    </a>
+  {% endif %}
+  <a href="{% url 'contract-list' %}?filter=expiring_soon{% if search %}&search={{ search|urlencode }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="btn {% if filter_type == 'expiring_soon' %}btn-primary{% else %}btn-outline{% endif %} btn-sm" style="{% if filter_type != 'expiring_soon' %}color: #b45309; border-color: rgba(245, 158, 11, 0.4);{% endif %}">
+    <i class="fa-solid fa-triangle-exclamation"></i> 30 天內到期預警
+  </a>
+  <a href="{% url 'contract-list' %}?filter=active{% if search %}&search={{ search|urlencode }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="btn {% if filter_type == 'active' %}btn-primary{% else %}btn-outline{% endif %} btn-sm">
+    生效中
+  </a>
+  <a href="{% url 'contract-list' %}?filter=pending{% if search %}&search={{ search|urlencode }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="btn {% if filter_type == 'pending' %}btn-primary{% else %}btn-outline{% endif %} btn-sm">
+    待生效
+  </a>
+  <a href="{% url 'contract-list' %}?filter=expired{% if search %}&search={{ search|urlencode }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="btn {% if filter_type == 'expired' %}btn-primary{% else %}btn-outline{% endif %} btn-sm">
+    已到期
+  </a>
+  <a href="{% url 'contract-list' %}?filter=terminated{% if search %}&search={{ search|urlencode }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="btn {% if filter_type == 'terminated' %}btn-primary{% else %}btn-outline{% endif %} btn-sm">
+    已終止
+  </a>
+</div>
+
+{% if can_approve_contracts %}
+<form id="batchApproveContractForm" method="post" action="{% url 'contract-batch-approve' %}" style="display:none;">
+  {% csrf_token %}
+  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+  <div id="batchContractInputs"></div>
+</form>
+{% endif %}
+
+<!-- Contracts Table -->
+<div class="card">
+  {% if can_approve_contracts %}
+    <div id="batchContractToolbar" style="display: none; justify-content: flex-end; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--glass-border);">
+      <span style="font-size: 0.85rem; color: var(--text-muted);">已選取 <strong id="selectedContractCount">0</strong> 筆待覆核合約</span>
+      <button type="button" class="btn btn-primary btn-sm" onclick="submitBatchContractApprove()">
+        <i class="fa-solid fa-check-double"></i> 批次核准通過
+      </button>
+    </div>
+  {% endif %}
+
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          {% if can_approve_contracts %}
+            <th style="width: 36px; text-align: center;">
+              <input type="checkbox" id="selectAllPendingContracts" title="全選本頁待覆核合約" style="cursor: pointer;">
+            </th>
+          {% endif %}
+          <th>合約編號</th>
+          <th>客戶代號與名稱</th>
+          <th>合約名稱</th>
+          <th>涵蓋標的</th>
+          <th>起訖期間</th>
+          <th>合約狀態 / 覆核</th>
+          <th>到期倒數</th>
+          <th>服務等級 (SLA)</th>
+          <th style="text-align: right;">操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ct in page_obj %}
+          <tr style="{% if ct.approval_status == 'pending' %}background: rgba(245, 158, 11, 0.04);{% elif ct.approval_status == 'rejected' %}background: rgba(239, 68, 68, 0.04);{% endif %}">
+            {% if can_approve_contracts %}
+              <td style="text-align: center;">
+                {% if ct.approval_status == 'pending' %}
+                  <input type="checkbox" class="ct-approve-cb" value="{{ ct.pk }}" style="cursor: pointer;">
+                {% endif %}
+              </td>
+            {% endif %}
+            <td>
+              <strong>{{ ct.contract_no }}</strong>
+              {% if ct.created_by %}
+                <div style="font-size: 0.72rem; color: var(--text-muted);">開單: {{ ct.created_by.username }}</div>
+              {% endif %}
+            </td>
+            <td>
+              <a href="{% url 'customer-detail' ct.customer.pk %}" style="font-weight: 600; color: var(--primary); text-decoration: none;">
+                [{{ ct.customer.code }}] {{ ct.customer.name }}
+              </a>
+            </td>
+            <td>{{ ct.name|default:"-" }}</td>
+            <td>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                {% with lic_count=ct.licenses.all|length probe_count=ct.probes.all|length %}
+                  {% if lic_count == 0 and probe_count == 0 %}
+                    <span style="color: var(--text-muted); font-size: 0.8rem;">通用維護 (無綁定標的)</span>
+                  {% else %}
+                    {% if lic_count > 0 %}
+                      <span class="badge badge-secondary" style="font-size: 0.75rem; width: fit-content;" title="{% for l in ct.licenses.all %}{{ l.license_no }} ({{ l.product.name }})&#10;{% endfor %}">
+                        <i class="fa-solid fa-certificate" style="color: #3b82f6;"></i> {{ lic_count }} 項授權
+                      </span>
+                    {% endif %}
+                    {% if probe_count > 0 %}
+                      <span class="badge badge-secondary" style="font-size: 0.75rem; width: fit-content;" title="{% for p in ct.probes.all %}{{ p.code }} ({{ p.model.name }})&#10;{% endfor %}">
+                        <i class="fa-solid fa-server" style="color: #10b981;"></i> {{ probe_count }} 台設備
+                      </span>
+                    {% endif %}
+                  {% endif %}
+                {% endwith %}
+              </div>
+            </td>
+            <td>{{ ct.start_date|date:"Y-m-d"|default:"-" }} ~ {{ ct.end_date|date:"Y-m-d"|default:"-" }}</td>
+            <td>
+              {% if ct.approval_status == 'pending' %}
+                <span class="badge badge-loaned">待覆核 (尚未生效)</span>
+              {% elif ct.approval_status == 'rejected' %}
+                <span class="badge badge-scrapped">簽核退回</span>
+                {% if ct.rejection_reason %}
+                  <div style="font-size: 0.72rem; color: #dc2626; max-width: 170px; margin-top: 3px;" title="{{ ct.rejection_reason }}">
+                    原因: {{ ct.rejection_reason|truncatechars:22 }}
+                  </div>
+                {% endif %}
+              {% elif ct.dynamic_status == 'active' %}
+                <span class="badge badge-available">生效中</span>
+              {% elif ct.dynamic_status == 'expired' %}
+                <span class="badge badge-scrapped">已到期</span>
+              {% elif ct.dynamic_status == 'pending' %}
+                <span class="badge badge-secondary">待生效</span>
+              {% elif ct.dynamic_status == 'terminated' %}
+                <span class="badge badge-secondary">已終止</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if ct.approval_status != 'approved' %}
+                <span style="color: var(--text-muted); font-size: 0.8rem;">待審中</span>
+              {% elif ct.end_date %}
+                {% if ct.days_remaining < 0 %}
+                  <span class="badge badge-scrapped">已逾期 {{ ct.days_remaining|stringformat:"+d"|slice:"1:" }} 天</span>
+                {% elif ct.days_remaining <= 30 %}
+                  <span class="badge badge-loaned">剩餘 {{ ct.days_remaining }} 天</span>
+                {% else %}
+                  <span class="badge badge-available">剩餘 {{ ct.days_remaining }} 天</span>
+                {% endif %}
+              {% else %}
+                <span style="color: var(--text-muted);">-</span>
+              {% endif %}
+            </td>
+            <td>{{ ct.sla_level|default:"標準" }}</td>
+            <td style="text-align: right; white-space: nowrap;">
+              {% if can_approve_contracts and ct.approval_status == 'pending' %}
+                <form method="post" action="{% url 'contract-approve' ct.pk %}" style="display:inline;" onsubmit="return confirm('確定核准維護保固合約「{{ ct.contract_no }}」正式生效嗎？');">
+                  {% csrf_token %}
+                  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                  <button type="submit" class="btn btn-primary btn-sm" title="核准通過" style="background: #059669; border-color: #059669;">
+                    <i class="fa-solid fa-check"></i> 核准
+                  </button>
+                </form>
+                <button type="button" class="btn btn-danger btn-sm" title="退回修正" onclick="openRejectContractModal('{% url 'contract-reject' ct.pk %}', '{{ ct.contract_no|escapejs }}')">
+                  <i class="fa-solid fa-xmark"></i> 退回
+                </button>
+              {% endif %}
+
+              {% if ct.approval_status == 'approved' %}
+                <button type="button" class="btn btn-outline btn-sm" data-cert-export="warranty" data-cert-id="{{ ct.pk }}" title="匯出軟體保固證書圖檔" style="color: #4d7c0f; border-color: rgba(101, 163, 13, 0.35);">
+                  <i class="fa-solid fa-award"></i>
+                </button>
+              {% else %}
+                <button type="button" class="btn btn-outline btn-sm" disabled title="尚未覆核通過，無法匯出保固證書" style="opacity: 0.4; cursor: not-allowed;">
+                  <i class="fa-solid fa-award"></i>
+                </button>
+              {% endif %}
+
+              {% if can_edit_licenses or can_approve_contracts %}
+                <a href="{% url 'contract-update' ct.pk %}" class="btn btn-outline btn-sm" title="檢視/編輯合約">
+                  <i class="fa-solid fa-pen"></i>
+                </a>
+              {% endif %}
+              {% if can_edit_licenses %}
+                <a href="{% url 'contract-delete' ct.pk %}" class="btn btn-danger btn-sm" title="刪除合約">
+                  <i class="fa-solid fa-trash"></i>
+                </a>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="10" style="text-align: center; padding: 3rem; color: var(--text-muted);">
+              查無相符的維護合約紀錄
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if page_obj.has_other_pages %}
+    <div class="pagination-bar">
+      <div>目前顯示第 {{ page_obj.number }} / {{ page_obj.paginator.num_pages }} 頁</div>
+      <div style="display: flex; gap: 0.5rem;">
+        {% if page_obj.has_previous %}
+          <a href="?page={{ page_obj.previous_page_number }}&filter={{ filter_type }}{% if approval_filter %}&approval={{ approval_filter }}{% endif %}{% if search %}&search={{ search|urlencode }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="btn btn-outline btn-sm">&laquo; 上一頁</a>
+        {% endif %}
+        <span class="btn btn-outline btn-sm">{{ page_obj.number }}</span>
+        {% if page_obj.has_next %}
+          <a href="?page={{ page_obj.next_page_number }}&filter={{ filter_type }}{% if approval_filter %}&approval={{ approval_filter }}{% endif %}{% if search %}&search={{ search|urlencode }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="btn btn-outline btn-sm">下一頁 &raquo;</a>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+</div>
+
+{% if can_approve_contracts %}
+<div id="rejectContractModal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.55); z-index:9999; align-items:center; justify-content:center; padding:1rem;">
+  <div class="card" style="width:100%; max-width:480px; margin:0;">
+    <h3 style="font-size:1.15rem; font-weight:700; margin-bottom:0.5rem; color:#dc2626;">
+      <i class="fa-solid fa-rotate-left"></i> 退回維護保固合約：<span id="rejectContractNoDisplay"></span>
+    </h3>
+    <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem;">
+      請填寫退回原因，系統將把此合約標記為「已退回」並寄信通知原開單人員修改後重新送審：
+    </p>
+    <form id="rejectContractForm" method="post" action="">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+      <div class="form-group">
+        <label>退回原因說明 <span style="color:#dc2626;">*</span></label>
+        <textarea name="rejection_reason" class="form-control" rows="3" required placeholder="例如：涵蓋設備清單有誤、維護起訖期間不符..."></textarea>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:1rem;">
+        <button type="button" class="btn btn-outline btn-sm" onclick="closeRejectContractModal()">取消</button>
+        <button type="submit" class="btn btn-danger btn-sm"><i class="fa-solid fa-paper-plane"></i> 確認退回</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  function openRejectContractModal(actionUrl, contractNo) {
+    document.getElementById('rejectContractForm').action = actionUrl;
+    document.getElementById('rejectContractNoDisplay').textContent = contractNo;
+    document.getElementById('rejectContractModal').style.display = 'flex';
+  }
+  function closeRejectContractModal() {
+    document.getElementById('rejectContractModal').style.display = 'none';
+  }
+
+  (function() {
+    const selectAll = document.getElementById('selectAllPendingContracts');
+    const cbs = Array.from(document.querySelectorAll('.ct-approve-cb'));
+    const toolbar = document.getElementById('batchContractToolbar');
+    const countEl = document.getElementById('selectedContractCount');
+
+    function syncToolbar() {
+      const checked = cbs.filter(c => c.checked);
+      if (toolbar && countEl) {
+        countEl.textContent = checked.length;
+        toolbar.style.display = checked.length > 0 ? 'flex' : 'none';
+      }
+    }
+
+    if (selectAll) {
+      selectAll.addEventListener('change', function() {
+        cbs.forEach(c => { c.checked = selectAll.checked; });
+        syncToolbar();
+      });
+    }
+    cbs.forEach(c => c.addEventListener('change', syncToolbar));
+  })();
+
+  function submitBatchContractApprove() {
+    const checked = Array.from(document.querySelectorAll('.ct-approve-cb:checked'));
+    if (!checked.length) return;
+    if (!confirm(`確定要批次核准這 ${checked.length} 筆維護保固合約嗎？`)) return;
+    const container = document.getElementById('batchContractInputs');
+    container.innerHTML = '';
+    checked.forEach(c => {
+      const inp = document.createElement('input');
+      inp.type = 'hidden';
+      inp.name = 'selected_ids';
+      inp.value = c.value;
+      container.appendChild(inp);
+    });
+    document.getElementById('batchApproveContractForm').submit();
+  }
+</script>
+{% endif %}
+{% endblock %}

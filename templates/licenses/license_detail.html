@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+
+{% block title %}授權詳情: {{ license.license_no }} - CRM Server{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+  <div style="display: flex; align-items: center; gap: 1rem;">
+    <a href="{% url 'license-list' %}" class="btn btn-outline btn-sm">
+      <i class="fa-solid fa-arrow-left"></i> 回授權清單
+    </a>
+    <div>
+      <h1 style="font-size: 1.75rem; font-weight: 700; margin-bottom: 0.15rem;">{{ license.license_no }}</h1>
+      <span style="font-size: 0.95rem; color: var(--text-muted);">
+        產品: <strong>{{ license.product.name }}</strong> | 客戶: 
+        <a href="{% url 'customer-detail' license.customer.pk %}" style="color: var(--primary); text-decoration: none; font-weight: 600;">
+          {{ license.customer.name }} ({{ license.customer.code }})
+        </a>
+      </span>
+    </div>
+  </div>
+  <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+    {% if can_approve_licenses and license.approval_status == 'pending' %}
+      <form method="post" action="{% url 'license-approve' license.pk %}" style="display:inline;" onsubmit="return confirm('確定核准軟體授權書「{{ license.license_no }}」正式生效嗎？');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-primary" style="background: #059669; border-color: #059669;">
+          <i class="fa-solid fa-stamp"></i> 核准通過
+        </button>
+      </form>
+      <button type="button" class="btn btn-danger" onclick="document.getElementById('detailRejectModal').style.display='flex'">
+        <i class="fa-solid fa-rotate-left"></i> 退回修正
+      </button>
+    {% endif %}
+    {% if license.approval_status == 'approved' %}
+      <button type="button" class="btn btn-outline" data-cert-export="license" data-cert-id="{{ license.pk }}" style="color: #4d7c0f; border-color: rgba(101, 163, 13, 0.45); background: rgba(132, 204, 22, 0.08);">
+        <i class="fa-solid fa-award"></i> 匯出授權證書
+      </button>
+    {% else %}
+      <button type="button" class="btn btn-outline" disabled title="此授權書尚未覆核通過，無法匯出正式證書" style="opacity: 0.5; cursor: not-allowed;">
+        <i class="fa-solid fa-lock"></i> 匯出證書 (待覆核)
+      </button>
+    {% endif %}
+    {% if can_edit_licenses %}
+      <a href="{% url 'license-update' license.pk %}" class="btn btn-primary">
+        <i class="fa-solid fa-pen-to-square"></i> {% if license.approval_status == 'rejected' %}修改並重新送審{% else %}編輯授權書{% endif %}
+      </a>
+      <a href="{% url 'license-delete' license.pk %}" class="btn btn-danger btn-sm">
+        <i class="fa-solid fa-trash"></i> 刪除
+      </a>
+    {% endif %}
+  </div>
+</div>
+
+{% if license.approval_status == 'pending' %}
+  <div class="card" style="border-left: 4px solid #d97706; background: rgba(245, 158, 11, 0.07); margin-bottom: 1.5rem; padding: 1rem 1.25rem;">
+    <div style="font-weight: 700; color: #b45309; margin-bottom: 0.25rem;">
+      <i class="fa-solid fa-hourglass-half"></i> 此軟體授權書目前為「待覆核」狀態，尚未正式成立
+    </div>
+    <div style="font-size: 0.875rem; color: var(--text-muted);">
+      開單人員：<strong>{{ license.created_by.username|default:"-" }}</strong> ｜ 未覆核通過前不計入生效中授權統計，且無法匯出正式授權證書。
+    </div>
+  </div>
+{% elif license.approval_status == 'rejected' %}
+  <div class="card" style="border-left: 4px solid #dc2626; background: rgba(239, 68, 68, 0.07); margin-bottom: 1.5rem; padding: 1rem 1.25rem;">
+    <div style="font-weight: 700; color: #dc2626; margin-bottom: 0.35rem;">
+      <i class="fa-solid fa-circle-xmark"></i> 此軟體授權書已被覆核退回，請修改後重新送審
+    </div>
+    <div style="font-size: 0.9rem; color: #991b1b; margin-bottom: 0.35rem;">
+      <strong>退回原因：</strong>{{ license.rejection_reason|default:"(未填寫)" }}
+    </div>
+    <div style="font-size: 0.8rem; color: var(--text-muted);">
+      退回人員：{{ license.reviewed_by.username|default:"-" }} ｜ 退回時間：{{ license.reviewed_at|date:"Y-m-d H:i"|default:"-" }}
+    </div>
+  </div>
+{% endif %}
+
+<!-- Basic Info & Quota Cards Grid -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 1.5rem; margin-bottom: 1.5rem;">
+  <!-- License Basic Info Card -->
+  <div class="card" style="margin-bottom: 0;">
+    <div class="card-header">
+      <div class="card-title">
+        <i class="fa-solid fa-file-shield"></i> 授權基本資訊
+      </div>
+      <div>
+        <span class="badge {{ license.badge_class }}">
+          {{ license.status_display }}
+        </span>
+      </div>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.25rem;">
+      <div>
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;">授權書編號</div>
+        <div style="font-weight: 700; font-family: monospace; font-size: 1.05rem; color: var(--primary);">{{ license.license_no }}</div>
+      </div>
+      <div>
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;">授權型態</div>
+        <div style="font-weight: 600;">
+          {% if license.is_perpetual or license.license_type == 'perpetual' %}
+            <span class="badge badge-available">永久買斷</span>
+          {% elif license.license_type == 'subscription' %}
+            <span class="badge badge-loaned">定期訂閱</span>
+          {% else %}
+            <span class="badge badge-secondary">{{ license.get_license_type_display }}</span>
+          {% endif %}
+        </div>
+      </div>
+      <div>
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;">採購客戶</div>
+        <div style="font-weight: 600;">
+          <a href="{% url 'customer-detail' license.customer.pk %}" style="color: var(--primary); text-decoration: none;">
+            {{ license.customer.name }}
+          </a>
+        </div>
+      </div>
+      <div>
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;">授權產品</div>
+        <div style="font-weight: 600;">{{ license.product.name }} ({{ license.product.code }})</div>
+      </div>
+      <div>
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;">授權數量</div>
+        <div style="font-weight: 700; font-size: 1.15rem; color: var(--primary);">{{ license.quantity }} <span style="font-size: 0.9rem; font-weight: normal; color: var(--text-muted);">{{ license.unit }}</span></div>
+      </div>
+      <div>
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;">授權起日</div>
+        <div style="font-weight: 600;">{{ license.start_date|date:"Y-m-d"|default:"未指定" }}</div>
+      </div>
+      <div>
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;">授權到期日</div>
+        <div style="font-weight: 600;">
+          {% if license.is_perpetual or license.license_type == 'perpetual' %}
+            <span style="color: #059669;"><i class="fa-solid fa-infinity"></i> 永久授權</span>
+          {% elif license.end_date %}
+            {{ license.end_date|date:"Y-m-d" }}
+          {% else %}
+            未指定
+          {% endif %}
+        </div>
+      </div>
+      <div style="grid-column: 1 / -1;">
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;">涵蓋之維護合約</div>
+        <div>
+          {% with contracts=license.maintenance_contracts.all %}
+            {% if contracts %}
+              <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                {% for c in contracts %}
+                  <a href="{% url 'contract-update' c.pk %}" class="badge badge-primary" style="text-decoration: none;" title="{{ c.name|default:'維護合約' }}">
+                    <i class="fa-solid fa-file-contract"></i> {{ c.contract_no }} ({{ c.get_status_display }})
+                  </a>
+                {% endfor %}
+              </div>
+            {% else %}
+              <span style="color: var(--text-muted); font-size: 0.85rem;">目前無關聯維護合約</span>
+            {% endif %}
+          {% endwith %}
+        </div>
+      </div>
+      <div style="grid-column: 1 / -1;">
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;">簽核覆核紀錄</div>
+        <div style="font-size: 0.875rem;">
+          開單人員：<strong>{{ license.created_by.username|default:"系統/既有紀錄" }}</strong>
+          {% if license.reviewed_by %}
+            ｜ 覆核人員：<strong>{{ license.reviewed_by.username }}</strong> ({{ license.reviewed_at|date:"Y-m-d H:i"|default:"-" }})
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Dynamic Custom Attributes -->
+<div class="card" style="margin-bottom: 1.5rem;">
+  <div class="card-header">
+    <div class="card-title">
+      <i class="fa-solid fa-sliders"></i> 產品動態擴充規格參數
+    </div>
+  </div>
+  {% if custom_display %}
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
+      {% for item in custom_display %}
+        <div style="background: #f8fafc; padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid var(--glass-border);">
+          <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;">{{ item.label }}</div>
+          <div style="font-weight: 600; font-size: 0.95rem;">{{ item.value|default:"-" }}</div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div style="padding: 1.5rem; text-align: center; color: var(--text-muted);">
+      此產品未定義特殊動態規格欄位，或目前尚未設定參數值
+    </div>
+  {% endif %}
+</div>
+
+<!-- License Key & Notes -->
+{% if license.license_key or license.note %}
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">
+        <i class="fa-solid fa-key"></i> 授權金鑰憑證與備註
+      </div>
+    </div>
+    {% if license.license_key %}
+      <div style="margin-bottom: 1rem;">
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.35rem; font-weight: 600;">授權金鑰 / 憑證序號</div>
+        <pre style="background: #1e293b; color: #38bdf8; padding: 1rem; border-radius: 8px; font-size: 0.85rem; overflow-x: auto; white-space: pre-wrap; word-break: break-all;">{{ license.license_key }}</pre>
+      </div>
+    {% endif %}
+    {% if license.note %}
+      <div>
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.35rem; font-weight: 600;">備註說明</div>
+        <div style="background: #f8fafc; padding: 0.75rem 1rem; border-radius: 8px; font-size: 0.9rem;">{{ license.note }}</div>
+      </div>
+    {% endif %}
+  </div>
+{% endif %}
+
+{% if can_approve_licenses and license.approval_status == 'pending' %}
+<div id="detailRejectModal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.55); z-index:9999; align-items:center; justify-content:center; padding:1rem;">
+  <div class="card" style="width:100%; max-width:480px; margin:0;">
+    <h3 style="font-size:1.15rem; font-weight:700; margin-bottom:0.5rem; color:#dc2626;">
+      <i class="fa-solid fa-rotate-left"></i> 退回軟體授權書：{{ license.license_no }}
+    </h3>
+    <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem;">
+      請填寫退回原因，系統將把此單據標記為「已退回」並通知原開單人員修改後重新送審：
+    </p>
+    <form method="post" action="{% url 'license-reject' license.pk %}">
+      {% csrf_token %}
+      <div class="form-group">
+        <label>退回原因說明 <span style="color:#dc2626;">*</span></label>
+        <textarea name="rejection_reason" class="form-control" rows="3" required placeholder="請說明需修正之處..."></textarea>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:1rem;">
+        <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('detailRejectModal').style.display='none'">取消</button>
+        <button type="submit" class="btn btn-danger btn-sm"><i class="fa-solid fa-paper-plane"></i> 確認退回</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

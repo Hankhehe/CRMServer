@@ -1,0 +1,297 @@
+{% extends "base.html" %}
+{% load crm_tags %}
+
+{% block title %}總覽儀表板{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.75rem;">
+  <div>
+    <h1 style="font-size: 1.75rem; font-weight: 700; margin-bottom: 0.25rem;">CRM & 資產總覽儀表板</h1>
+    <p style="color: var(--text-muted); font-size: 0.95rem;">即時掌握客戶關係、維護合約到期預警與 硬體設備庫存分佈</p>
+  </div>
+  <div style="display: flex; gap: 0.75rem;">
+    {% if can_edit_customers %}
+      <a href="{% url 'customer-create' %}" class="btn btn-outline">
+        <i class="fa-solid fa-user-plus"></i> 新增客戶
+      </a>
+    {% endif %}
+    {% if can_edit_licenses %}
+      <a href="{% url 'license-create' %}" class="btn btn-outline">
+        <i class="fa-solid fa-certificate"></i> 新增授權書
+      </a>
+      <a href="{% url 'contract-create' %}" class="btn btn-outline">
+        <i class="fa-solid fa-file-circle-plus"></i> 新增合約
+      </a>
+    {% endif %}
+    {% if can_edit_hardware %}
+      <a href="{% url 'hardware-transaction-create' %}" class="btn btn-primary">
+        <i class="fa-solid fa-right-left"></i> 執行庫存異動
+      </a>
+    {% endif %}
+  </div>
+</div>
+
+<!-- KPI Cards Grid -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.25rem; margin-bottom: 1.75rem;">
+  <!-- Customer KPI -->
+  <div class="card" style="margin-bottom: 0;">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+      <div>
+        <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.25rem;">總客戶數</div>
+        <div style="font-size: 2rem; font-weight: 700; color: var(--text-main);">{{ total_customers }}</div>
+      </div>
+      <div style="width: 48px; height: 48px; border-radius: 12px; background: rgba(79, 70, 229, 0.1); color: var(--primary); display: flex; align-items: center; justify-content: center; font-size: 1.35rem;">
+        <i class="fa-solid fa-building-user"></i>
+      </div>
+    </div>
+    <div style="margin-top: 0.75rem; font-size: 0.8rem; color: var(--text-muted);">
+      <a href="{% url 'customer-list' %}" style="color: var(--primary); text-decoration: none; font-weight: 600;">
+        瀏覽所有客戶名冊 <i class="fa-solid fa-arrow-right" style="font-size: 0.75rem;"></i>
+      </a>
+    </div>
+  </div>
+
+  <!-- Software License KPI -->
+  <div class="card" style="margin-bottom: 0;">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+      <div>
+        <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.25rem;">生效中軟體授權</div>
+        <div style="font-size: 2rem; font-weight: 700; color: #0284c7;">{{ active_licenses }}</div>
+      </div>
+      <div style="width: 48px; height: 48px; border-radius: 12px; background: rgba(2, 132, 199, 0.1); color: #0284c7; display: flex; align-items: center; justify-content: center; font-size: 1.35rem;">
+        <i class="fa-solid fa-certificate"></i>
+      </div>
+    </div>
+    <div style="margin-top: 0.75rem; font-size: 0.8rem; color: {% if expiring_licenses_count > 0 %}#b45309{% else %}var(--text-muted){% endif %};">
+      <a href="{% url 'license-list' %}" style="color: #0284c7; text-decoration: none; font-weight: 600;">
+        授權清單
+      </a>
+      {% if expiring_licenses_count > 0 %}
+        <span style="margin-left: 6px; font-weight: 600;">(<i class="fa-solid fa-triangle-exclamation"></i> {{ expiring_licenses_count }} 份即將到期)</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Contract KPI -->
+  <div class="card" style="margin-bottom: 0;">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+      <div>
+        <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.25rem;">生效中維護合約</div>
+        <div style="font-size: 2rem; font-weight: 700; color: #059669;">{{ active_contracts }}</div>
+      </div>
+      <div style="width: 48px; height: 48px; border-radius: 12px; background: rgba(16, 185, 129, 0.1); color: #059669; display: flex; align-items: center; justify-content: center; font-size: 1.35rem;">
+        <i class="fa-solid fa-file-contract"></i>
+      </div>
+    </div>
+    <div style="margin-top: 0.75rem; font-size: 0.8rem; color: #b45309; font-weight: 500;">
+      <i class="fa-solid fa-triangle-exclamation"></i> <strong>{{ expiring_soon_count }}</strong> 份合約即將於 30 天內到期
+    </div>
+  </div>
+
+  <!-- Probe Inventory KPI -->
+  <div class="card" style="margin-bottom: 0;">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+      <div>
+        <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.25rem;">在庫可用設備</div>
+        <div style="font-size: 2rem; font-weight: 700; color: var(--primary);">{{ probe_counts.available }}</div>
+      </div>
+      <div style="width: 48px; height: 48px; border-radius: 12px; background: rgba(79, 70, 229, 0.1); color: var(--primary); display: flex; align-items: center; justify-content: center; font-size: 1.35rem;">
+        <i class="fa-solid fa-boxes-stacked"></i>
+      </div>
+    </div>
+    <div style="margin-top: 0.75rem; font-size: 0.8rem; color: var(--text-muted); display: flex; justify-content: space-between; align-items: center;">
+      <span>設備總量: <strong>{{ probe_counts.total }}</strong> 台</span>
+      <a href="{% url 'hardware-dashboard' %}" style="color: var(--primary); text-decoration: none; font-weight: 600;">
+        資產儀表板 <i class="fa-solid fa-arrow-right" style="font-size: 0.75rem;"></i>
+      </a>
+    </div>
+  </div>
+
+  <!-- Loaned Probes KPI -->
+  <div class="card" style="margin-bottom: 0;">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+      <div>
+        <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.25rem;">借測中設備</div>
+        <div style="font-size: 2rem; font-weight: 700; color: #d97706;">{{ probe_counts.loaned }}</div>
+      </div>
+      <div style="width: 48px; height: 48px; border-radius: 12px; background: rgba(245, 158, 11, 0.1); color: #d97706; display: flex; align-items: center; justify-content: center; font-size: 1.35rem;">
+        <i class="fa-solid fa-hand-holding-hand"></i>
+      </div>
+    </div>
+    <div style="margin-top: 0.75rem; font-size: 0.8rem; color: var(--text-muted);">
+      <a href="{% url 'hardware-dashboard' %}#loan-tracking-section" style="color: #d97706; text-decoration: none; font-weight: 600;">
+        前往資產儀表板追蹤借測 <i class="fa-solid fa-arrow-right" style="font-size: 0.75rem;"></i>
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- Two Columns Grid: Alerts Section -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 1.5rem; margin-bottom: 1.75rem;">
+  <!-- Contract Expiry Alerts -->
+  <div class="card" style="margin-bottom: 0;">
+    <div class="card-header">
+      <div class="card-title">
+        <i class="fa-solid fa-triangle-exclamation" style="color: #f59e0b;"></i> 維護合約到期預警 (30 天內)
+      </div>
+      <a href="{% url 'contract-list' %}?filter=expiring_soon" class="btn btn-outline btn-sm">查看全部</a>
+    </div>
+    {% if expiring_soon_contracts %}
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>合約編號</th>
+              <th>客戶名稱</th>
+              <th>到期日</th>
+              <th>剩餘天數</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for contract in expiring_soon_contracts %}
+              <tr>
+                <td><strong>{{ contract.contract_no }}</strong></td>
+                <td>
+                  <a href="{% url 'customer-detail' contract.customer.pk %}" style="color: var(--primary); text-decoration: none; font-weight: 600;">
+                    [{{ contract.customer.code }}] {{ contract.customer.name }}
+                  </a>
+                </td>
+                <td>{{ contract.end_date|date:"Y-m-d" }}</td>
+                <td>
+                  <span class="badge badge-loaned">剩餘 {{ contract.days_remaining }} 天</span>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div style="padding: 2.5rem; text-align: center; color: var(--text-muted);">
+        <i class="fa-solid fa-circle-check" style="font-size: 2rem; color: #10b981; margin-bottom: 0.5rem; display: block;"></i>
+        近期無即將到期的維護合約，合約狀態一切良好！
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Loan Overdue & Active Loans -->
+  <div class="card" style="margin-bottom: 0;">
+    <div class="card-header">
+      <div class="card-title">
+        <i class="fa-solid fa-clock" style="color: #6366f1;"></i> 借測中設備與歸還追蹤
+      </div>
+      <a href="{% url 'hardware-dashboard' %}#loan-tracking-section" class="btn btn-outline btn-sm">完整追蹤</a>
+    </div>
+    {% if loaned_probes %}
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>設備序號</th>
+              <th>型號</th>
+              <th>借測客戶</th>
+              <th>預計歸還日</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in loaned_probes %}
+              <tr>
+                <td>
+                  <a href="{% url 'hardware-detail' p.pk %}" style="color: var(--primary); text-decoration: none; font-weight: 600;">
+                    {{ p.code }}
+                  </a>
+                </td>
+                <td>{{ p.model.name }}</td>
+                <td>
+                  {% if p.customer %}
+                    <a href="{% url 'customer-detail' p.customer.pk %}" style="color: inherit; text-decoration: none;">
+                      [{{ p.customer.code }}] {{ p.customer.name }}
+                    </a>
+                  {% else %}
+                    <span style="color: var(--text-muted);">未指定</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if p.expected_return_at %}
+                    {% if p.is_loan_overdue %}
+                      <span class="badge badge-scrapped"><i class="fa-solid fa-circle-exclamation"></i> 已逾期 ({{ p.expected_return_at|date:"Y-m-d" }})</span>
+                    {% else %}
+                      <span class="badge badge-loaned">{{ p.expected_return_at|date:"Y-m-d" }}</span>
+                    {% endif %}
+                  {% else %}
+                    <span style="color: var(--text-muted);">未設定</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div style="padding: 2.5rem; text-align: center; color: var(--text-muted);">
+        <i class="fa-solid fa-boxes-packing" style="font-size: 2rem; color: #64748b; margin-bottom: 0.5rem; display: block;"></i>
+        目前沒有出借中的設備。
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Recent Transactions -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">
+      <i class="fa-solid fa-clock-rotate-left"></i> 最新庫存交易紀錄
+    </div>
+    <a href="{% url 'hardware-transactions' %}" class="btn btn-outline btn-sm">完整異動紀錄</a>
+  </div>
+  {% if recent_transactions %}
+    <div class="table-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th>發生時間</th>
+            <th>類型</th>
+            <th>設備序號</th>
+            <th>規格型號</th>
+            <th>關聯客戶 (代號/名稱)</th>
+            <th>經手人</th>
+            <th>備註</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in recent_transactions %}
+            <tr>
+              <td>{{ t.occurred_at|date:"Y-m-d H:i" }}</td>
+              <td>
+                {% if t.type == 'IN' %}<span class="badge badge-available">進貨入庫</span>
+                {% elif t.type == 'OUT' %}<span class="badge badge-shipped">正式出貨</span>
+                {% elif t.type == 'LOAN' %}<span class="badge badge-loaned">客戶借測</span>
+                {% elif t.type == 'RETURN_LOAN' %}<span class="badge badge-available">借測歸還</span>
+                {% elif t.type == 'RETURN_OUT' %}<span class="badge badge-repair">出貨退貨</span>
+                {% elif t.type == 'SCRAP' %}<span class="badge badge-scrapped">設備報廢</span>
+                {% endif %}
+              </td>
+              <td>
+                <a href="{% url 'hardware-detail' t.probe.pk %}" style="color: var(--primary); text-decoration: none; font-weight: 600;">
+                  {{ t.probe.code }}
+                </a>
+              </td>
+              <td>{{ t.probe.model.name }}</td>
+              <td>
+                {% if t.customer %}
+                  <a href="{% url 'customer-detail' t.customer.pk %}" style="color: inherit; text-decoration: none;">
+                    <strong>[{{ t.customer.code }}]</strong> {{ t.customer.name }}
+                  </a>
+                {% else %}
+                  <span style="color: var(--text-muted);">-</span>
+                {% endif %}
+              </td>
+              <td>{{ t.created_by.username|default:"系統" }}</td>
+              <td>{{ t.note|truncatechars:35|default:"-" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,332 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_create %}新增軟體授權書{% else %}編輯軟體授權書 - {{ license.license_no }}{% endif %} - CRM Server{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+  <div>
+    <h1 style="font-size: 1.75rem; font-weight: 700; margin-bottom: 0.25rem;">
+      {% if is_create %}新增軟體授權書{% else %}編輯軟體授權書: {{ license.license_no }}{% endif %}
+    </h1>
+    <p style="color: var(--text-muted); font-size: 0.95rem;">填寫軟體產品授權與自訂動態規格參數</p>
+  </div>
+  <a href="{% if license %}{% url 'license-detail' license.pk %}{% else %}{% url 'license-list' %}{% endif %}" class="btn btn-outline">
+    <i class="fa-solid fa-arrow-left"></i> 回列表
+  </a>
+</div>
+
+<div class="card" style="max-width: 900px; margin: 0 auto;">
+  {% if license and license.approval_status == 'rejected' %}
+    <div style="border-left: 4px solid #dc2626; background: rgba(239, 68, 68, 0.08); padding: 0.9rem 1.1rem; border-radius: 6px; margin-bottom: 1.25rem;">
+      <div style="font-weight: 700; color: #dc2626;"><i class="fa-solid fa-rotate-left"></i> 此單據前次審核已被退回（儲存後將自動重新送出覆核）</div>
+      <div style="font-size: 0.875rem; color: #991b1b; margin-top: 0.25rem;">退回原因：{{ license.rejection_reason|default:"-" }}</div>
+    </div>
+  {% elif requires_approval %}
+    <div style="border-left: 4px solid #d97706; background: rgba(245, 158, 11, 0.08); padding: 0.85rem 1.1rem; border-radius: 6px; margin-bottom: 1.25rem; font-size: 0.875rem; color: #92400e;">
+      <i class="fa-solid fa-stamp"></i> <strong>簽核流程提醒：</strong>目前已啟用「軟體授權書簽核流程」。{% if is_create %}您送出後單據將進入「待覆核」狀態，待主管核准後正式成立。{% else %}若您修改了核心授權條件（客戶、產品、數量、期間、金鑰等），儲存後將轉回「待覆核」狀態；若僅修改備註則維持原核准狀態。{% endif %}
+    </div>
+  {% endif %}
+  <form method="post" id="licenseForm">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+      <div class="alert alert-error" style="margin-bottom: 1.5rem;">
+        {% for error in form.non_field_errors %}
+          <div><i class="fa-solid fa-circle-exclamation"></i> {{ error }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <!-- 區塊 1: 客戶與產品基礎關聯 -->
+    <div style="border-bottom: 1px solid var(--glass-border); padding-bottom: 1.25rem; margin-bottom: 1.5rem;">
+      <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 1rem; color: var(--primary);">
+        <i class="fa-solid fa-cube"></i> 客戶與軟體產品
+      </h3>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.25rem;">
+        <div class="form-group">
+          <label for="{{ form.customer.id_for_label }}">採購客戶 *</label>
+          {{ form.customer }}
+          {% if form.customer.errors %}<div style="color: #dc2626; font-size: 0.8rem; margin-top: 0.25rem;">{{ form.customer.errors.0 }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.product.id_for_label }}">授權軟體產品 *</label>
+          {{ form.product }}
+          {% if form.product.errors %}<div style="color: #dc2626; font-size: 0.8rem; margin-top: 0.25rem;">{{ form.product.errors.0 }}</div>{% endif %}
+          <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">更換產品時將自動載入該產品之自訂規格欄位</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 區塊 2: 授權範圍與有效期限 -->
+    <div style="border-bottom: 1px solid var(--glass-border); padding-bottom: 1.25rem; margin-bottom: 1.5rem;">
+      <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 1rem; color: var(--primary);">
+        <i class="fa-solid fa-clock"></i> 授權範圍與期間
+      </h3>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.25rem;">
+        <div class="form-group">
+          <label for="{{ form.license_no.id_for_label }}">授權書編號 / 合約號 *</label>
+          {{ form.license_no }}
+          {% if form.license_no.errors %}<div style="color: #dc2626; font-size: 0.8rem; margin-top: 0.25rem;">{{ form.license_no.errors.0 }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.quantity.id_for_label }}">採購/授權使用數量 *</label>
+          {{ form.quantity }}
+          {% if form.quantity.errors %}<div style="color: #dc2626; font-size: 0.8rem; margin-top: 0.25rem;">{{ form.quantity.errors.0 }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label for="{{ form.unit.id_for_label }}">計量單位</label>
+          {{ form.unit }}
+          {% if form.unit.errors %}<div style="color: #dc2626; font-size: 0.8rem; margin-top: 0.25rem;">{{ form.unit.errors.0 }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.25rem; align-items: center; margin-top: 0.5rem;">
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="{{ form.start_date.id_for_label }}">授權起始日</label>
+          {{ form.start_date }}
+          {% if form.start_date.errors %}<div style="color: #dc2626; font-size: 0.8rem; margin-top: 0.25rem;">{{ form.start_date.errors.0 }}</div>{% endif %}
+        </div>
+        <div class="form-group" id="endDateGroup" style="margin-bottom: 0;">
+          <label for="{{ form.end_date.id_for_label }}">授權到期日</label>
+          {{ form.end_date }}
+          {% if form.end_date.errors %}<div style="color: #dc2626; font-size: 0.8rem; margin-top: 0.25rem;">{{ form.end_date.errors.0 }}</div>{% endif %}
+        </div>
+        <div class="form-group" style="margin-bottom: 0; padding-top: 1.5rem;">
+          <label style="display: flex; align-items: center; cursor: pointer; font-weight: 600;">
+            {{ form.is_perpetual }} 永久買斷授權 (不受到期日控制)
+          </label>
+        </div>
+        <div class="form-group" style="margin-bottom: 0; padding-top: 0.5rem;">
+          <label style="display: flex; align-items: center; cursor: pointer; font-weight: 600; color: #dc2626;">
+            {{ form.is_disabled }} 停用此授權書
+          </label>
+          <div id="statusPreviewContainer" style="margin-top: 0.35rem; font-size: 0.85rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.4rem;">
+            <span>目前狀態預覽：</span>
+            <span id="statusPreviewBadge" class="badge badge-available">生效中</span>
+          </div>
+          {% if form.is_disabled.errors %}<div style="color: #dc2626; font-size: 0.8rem; margin-top: 0.25rem;">{{ form.is_disabled.errors.0 }}</div>{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- 區塊 3: 產品動態擴充規格欄位 (JSONField) -->
+    <div id="dynamicFieldsSection" style="border-bottom: 1px solid var(--glass-border); padding-bottom: 1.25rem; margin-bottom: 1.5rem;">
+      <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 0.5rem; color: var(--primary);">
+        <i class="fa-solid fa-sliders"></i> 產品動態規格參數 (自訂欄位)
+      </h3>
+      <div id="dynamicFieldsContainer" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem; background: #f8fafc; padding: 1rem; border-radius: 8px;">
+        {% for field in form %}
+          {% if field.name|slice:":4" == "dyn_" %}
+            {% if field.field.widget.input_type == "checkbox" and field.field.choices %}
+              <div class="form-group" style="margin-bottom: 0; grid-column: 1 / -1;">
+                <label>{{ field.label }}{% if field.field.required %} *{% endif %}</label>
+                <div style="display: flex; flex-wrap: wrap; gap: 0.85rem; padding: 0.65rem 0.85rem; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px;">
+                  {% for subwidget in field %}
+                    <label style="display: inline-flex; align-items: center; gap: 0.4rem; margin-bottom: 0; cursor: pointer; font-weight: 500;">
+                      {{ subwidget.tag }} {{ subwidget.choice_label }}
+                    </label>
+                  {% endfor %}
+                </div>
+                {% if field.errors %}<div style="color: #dc2626; font-size: 0.8rem; margin-top: 0.25rem;">{{ field.errors.0 }}</div>{% endif %}
+              </div>
+            {% else %}
+              <div class="form-group" style="margin-bottom: 0;">
+                <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} *{% endif %}</label>
+                {{ field }}
+                {% if field.errors %}<div style="color: #dc2626; font-size: 0.8rem; margin-top: 0.25rem;">{{ field.errors.0 }}</div>{% endif %}
+              </div>
+            {% endif %}
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- 區塊 5: 金鑰憑證與備註 -->
+    <div style="margin-bottom: 1.5rem;">
+      <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 1rem; color: var(--primary);">
+        <i class="fa-solid fa-key"></i> 憑證金鑰與備註
+      </h3>
+      <div class="form-group">
+        <label for="{{ form.license_key.id_for_label }}">授權金鑰 / 憑證序號字串</label>
+        {{ form.license_key }}
+        {% if form.license_key.errors %}<div style="color: #dc2626; font-size: 0.8rem; margin-top: 0.25rem;">{{ form.license_key.errors.0 }}</div>{% endif %}
+      </div>
+      <div class="form-group">
+        <label for="{{ form.note.id_for_label }}">授權備註說明</label>
+        {{ form.note }}
+        {% if form.note.errors %}<div style="color: #dc2626; font-size: 0.8rem; margin-top: 0.25rem;">{{ form.note.errors.0 }}</div>{% endif %}
+      </div>
+    </div>
+
+    <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+      <a href="{% if license %}{% url 'license-detail' license.pk %}{% else %}{% url 'license-list' %}{% endif %}" class="btn btn-outline">
+        取消
+      </a>
+      <button type="submit" class="btn btn-primary">
+        <i class="fa-solid fa-floppy-disk"></i> 儲存授權書
+      </button>
+    </div>
+  </form>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  const isPerpetualCheckbox = document.getElementById("id_is_perpetual");
+  const isDisabledCheckbox = document.getElementById("id_is_disabled");
+  const startDateInput = document.getElementById("id_start_date");
+  const endDateInput = document.getElementById("id_end_date");
+  const endDateGroup = document.getElementById("endDateGroup");
+  const productSelect = document.getElementById("id_product_select");
+  const statusPreviewBadge = document.getElementById("statusPreviewBadge");
+
+  function getTodayString() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  function updateStatusPreview() {
+    if (!statusPreviewBadge) return;
+
+    if (isDisabledCheckbox && isDisabledCheckbox.checked) {
+      statusPreviewBadge.className = "badge badge-scrapped";
+      statusPreviewBadge.textContent = "已停用";
+      return;
+    }
+
+    const todayStr = getTodayString();
+    const startDateVal = startDateInput ? startDateInput.value : "";
+    const endDateVal = endDateInput ? endDateInput.value : "";
+    const isPerpetual = isPerpetualCheckbox ? isPerpetualCheckbox.checked : false;
+
+    if (startDateVal && startDateVal > todayStr) {
+      statusPreviewBadge.className = "badge badge-secondary";
+      statusPreviewBadge.textContent = "待生效";
+      return;
+    }
+
+    if (!isPerpetual && endDateVal && endDateVal < todayStr) {
+      statusPreviewBadge.className = "badge badge-scrapped";
+      statusPreviewBadge.textContent = "已過期";
+      return;
+    }
+
+    statusPreviewBadge.className = "badge badge-available";
+    statusPreviewBadge.textContent = isPerpetual ? "生效中 (永久有效)" : "生效中";
+  }
+
+  function updatePerpetualUI() {
+    if (isPerpetualCheckbox.checked) {
+      endDateInput.value = "";
+      endDateInput.disabled = true;
+      endDateGroup.style.opacity = "0.4";
+    } else {
+      endDateInput.disabled = false;
+      endDateGroup.style.opacity = "1";
+    }
+    updateStatusPreview();
+  }
+
+  if (isPerpetualCheckbox) {
+    isPerpetualCheckbox.addEventListener("change", updatePerpetualUI);
+    updatePerpetualUI();
+  }
+
+  if (isDisabledCheckbox) {
+    isDisabledCheckbox.addEventListener("change", updateStatusPreview);
+  }
+  if (startDateInput) {
+    startDateInput.addEventListener("change", updateStatusPreview);
+    startDateInput.addEventListener("input", updateStatusPreview);
+  }
+  if (endDateInput) {
+    endDateInput.addEventListener("change", updateStatusPreview);
+    endDateInput.addEventListener("input", updateStatusPreview);
+  }
+  updateStatusPreview();
+
+  // Dynamic Product Change Ajax
+  if (productSelect) {
+    productSelect.addEventListener("change", function() {
+      const productId = this.value;
+      if (!productId) return;
+
+      fetch(`/licenses/api/products/${productId}/meta/`)
+        .then(response => response.json())
+        .then(data => {
+          // Update Default Unit if unit field is default
+          const unitInput = document.getElementById("id_unit");
+          if (unitInput && data.default_unit && (!unitInput.value || unitInput.value === "台")) {
+            unitInput.value = data.default_unit;
+          }
+
+          // Update Dynamic Fields Container
+          const dynamicFieldsContainer = document.getElementById("dynamicFieldsContainer");
+          if (dynamicFieldsContainer) {
+            dynamicFieldsContainer.innerHTML = "";
+            if (data.custom_field_schema && data.custom_field_schema.length > 0) {
+              data.custom_field_schema.forEach(field => {
+                const fKey = field.key;
+                const fLabel = field.label || fKey;
+                const fType = field.type || "text";
+                const fReq = field.required ? " *" : "";
+                const fDef = field.default !== undefined && field.default !== null ? field.default : "";
+
+                const group = document.createElement("div");
+                group.className = "form-group";
+                group.style.marginBottom = "0";
+
+                let inputHtml = "";
+                if (fType === "number") {
+                  inputHtml = `<input type="number" step="any" name="dyn_${fKey}" value="${fDef}" class="form-control" id="id_dyn_${fKey}" ${field.required ? 'required' : ''}>`;
+                  group.innerHTML = `<label for="id_dyn_${fKey}">${fLabel}${fReq}</label>${inputHtml}`;
+                } else if (fType === "select") {
+                  let optHtml = `<option value="">-- 請選擇 --</option>`;
+                  (field.options || []).forEach(opt => {
+                    const sel = opt === fDef ? "selected" : "";
+                    optHtml += `<option value="${opt}" ${sel}>${opt}</option>`;
+                  });
+                  inputHtml = `<select name="dyn_${fKey}" class="form-control" id="id_dyn_${fKey}" ${field.required ? 'required' : ''}>${optHtml}</select>`;
+                  group.innerHTML = `<label for="id_dyn_${fKey}">${fLabel}${fReq}</label>${inputHtml}`;
+                } else if (fType === "multiselect") {
+                  group.style.gridColumn = "1 / -1";
+                  const defList = Array.isArray(fDef) ? fDef : String(fDef).split(",").map(s => s.trim()).filter(Boolean);
+                  let checksHtml = `<div style="display: flex; flex-wrap: wrap; gap: 0.85rem; padding: 0.65rem 0.85rem; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px;">`;
+                  (field.options || []).forEach((opt, idx) => {
+                    const checked = defList.includes(opt) ? "checked" : "";
+                    checksHtml += `
+                      <label style="display: inline-flex; align-items: center; gap: 0.4rem; margin-bottom: 0; cursor: pointer; font-weight: 500;">
+                        <input type="checkbox" name="dyn_${fKey}" value="${opt}" id="id_dyn_${fKey}_${idx}" ${checked}>
+                        ${opt}
+                      </label>
+                    `;
+                  });
+                  checksHtml += `</div>`;
+                  group.innerHTML = `<label>${fLabel}${fReq}</label>${checksHtml}`;
+                } else if (fType === "boolean") {
+                  const isChecked = fDef === true || fDef === "true" || fDef === "True" || fDef === "1" || fDef === "是";
+                  inputHtml = `<label style="display:flex;align-items:center;cursor:pointer;margin-top:1.75rem;"><input type="checkbox" name="dyn_${fKey}" value="true" ${isChecked ? 'checked' : ''} style="margin-right:8px;"> ${fLabel}</label>`;
+                  group.innerHTML = inputHtml;
+                } else if (fType === "datetime") {
+                  const dtDef = fDef ? String(fDef).replace(" ", "T").slice(0, 16) : "";
+                  inputHtml = `<input type="datetime-local" name="dyn_${fKey}" value="${dtDef}" class="form-control" id="id_dyn_${fKey}" ${field.required ? 'required' : ''}>`;
+                  group.innerHTML = `<label for="id_dyn_${fKey}">${fLabel}${fReq}</label>${inputHtml}`;
+                } else {
+                  inputHtml = `<input type="text" name="dyn_${fKey}" value="${fDef}" class="form-control" id="id_dyn_${fKey}" ${field.required ? 'required' : ''}>`;
+                  group.innerHTML = `<label for="id_dyn_${fKey}">${fLabel}${fReq}</label>${inputHtml}`;
+                }
+                dynamicFieldsContainer.appendChild(group);
+              });
+            } else {
+              dynamicFieldsContainer.innerHTML = `<div style="color: var(--text-muted); font-size: 0.85rem; grid-column: 1 / -1;">此產品未定義特殊動態規格欄位。</div>`;
+            }
+          }
+        })
+        .catch(err => console.error("Error fetching product meta:", err));
+    });
+  }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+  <title>{% block title %}CRM & 資產管理系統{% endblock %} - CRM Server</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    :root {
+      --primary: #4f46e5;
+      --primary-hover: #4338ca;
+      --primary-light: rgba(79, 70, 229, 0.08);
+      --bg-gradient: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+      --glass-bg: rgba(255, 255, 255, 0.88);
+      --glass-border: rgba(15, 23, 42, 0.08);
+      --glass-shadow: 0 10px 25px -5px rgba(148, 163, 184, 0.12), 0 8px 10px -6px rgba(148, 163, 184, 0.12);
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --sidebar-width: 260px;
+      --sidebar-collapsed-width: 72px;
+      --transition-speed: 0.22s;
+
+      /* Status Colors */
+      --status-available-bg: rgba(16, 185, 129, 0.12);
+      --status-available-text: #059669;
+      --status-shipped-bg: rgba(59, 130, 246, 0.12);
+      --status-shipped-text: #1d4ed8;
+      --status-loaned-bg: rgba(245, 158, 11, 0.12);
+      --status-loaned-text: #b45309;
+      --status-scrapped-bg: rgba(239, 68, 68, 0.12);
+      --status-scrapped-text: #b91c1c;
+      --status-repair-bg: rgba(168, 85, 247, 0.12);
+      --status-repair-text: #7e22ce;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg-gradient);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      overflow-x: hidden;
+    }
+    .sidebar {
+      width: var(--sidebar-width);
+      background: var(--glass-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-right: 1px solid var(--glass-border);
+      position: fixed;
+      height: 100vh;
+      padding: 1.25rem 1rem;
+      display: flex;
+      flex-direction: column;
+      z-index: 100;
+      box-shadow: var(--glass-shadow);
+      overflow-y: auto;
+      overflow-x: hidden;
+      transition: width var(--transition-speed) cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .sidebar-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.5rem;
+      padding: 0 0.25rem;
+      min-height: 38px;
+    }
+    .sidebar-brand {
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: var(--primary);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    .sidebar-brand-icon {
+      font-size: 1.35rem;
+      min-width: 24px;
+      text-align: center;
+      color: var(--primary);
+    }
+    .brand-text {
+      white-space: nowrap;
+      transition: opacity var(--transition-speed) ease;
+    }
+    .sidebar-collapse-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      font-size: 0.85rem;
+    }
+    .sidebar-collapse-btn:hover {
+      background: var(--primary-light);
+      color: var(--primary);
+    }
+    .nav-section-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin: 1.25rem 0 0.5rem 0.5rem;
+      white-space: nowrap;
+      transition: all var(--transition-speed) ease;
+    }
+    .nav-links {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+    .nav-link {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      padding: 0.75rem 0.85rem;
+      color: var(--text-muted);
+      text-decoration: none;
+      border-radius: 10px;
+      font-weight: 500;
+      font-size: 0.92rem;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+      position: relative;
+    }
+    .nav-link i {
+      font-size: 1.1rem;
+      min-width: 22px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+    .nav-text {
+      white-space: nowrap;
+      transition: opacity var(--transition-speed) ease;
+    }
+    .nav-link:hover, .nav-link.active {
+      background: var(--primary-light);
+      color: var(--primary);
+      transform: translateX(3px);
+    }
+
+    /* Collapsed Sidebar */
+    .sidebar-collapsed .sidebar {
+      width: var(--sidebar-collapsed-width);
+      padding: 1.25rem 0.5rem;
+    }
+    .sidebar-collapsed .sidebar-header {
+      justify-content: center;
+      padding: 0;
+    }
+    .sidebar-collapsed .brand-text {
+      display: none;
+    }
+    .sidebar-collapsed .sidebar-collapse-btn {
+      display: none;
+    }
+    .sidebar-collapsed .nav-section-title {
+      font-size: 0;
+      height: 1px;
+      background: var(--glass-border);
+      margin: 0.75rem 0.5rem;
+      padding: 0;
+      overflow: hidden;
+    }
+    .sidebar-collapsed .nav-link {
+      justify-content: center;
+      padding: 0.75rem 0;
+      gap: 0;
+    }
+    .sidebar-collapsed .nav-link .nav-text {
+      display: none;
+    }
+    .sidebar-collapsed .nav-link:hover,
+    .sidebar-collapsed .nav-link.active {
+      transform: none;
+    }
+
+    /* Tooltip when collapsed */
+    .sidebar-collapsed .nav-link {
+      position: relative;
+    }
+    .sidebar-collapsed .nav-link::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      left: calc(100% + 12px);
+      top: 50%;
+      transform: translateY(-50%);
+      background: #0f172a;
+      color: #ffffff;
+      padding: 0.45rem 0.75rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      white-space: nowrap;
+      pointer-events: none;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.15s ease, transform 0.15s ease;
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.25);
+      z-index: 1000;
+    }
+    .sidebar-collapsed .nav-link::before {
+      content: "";
+      position: absolute;
+      left: calc(100% + 4px);
+      top: 50%;
+      transform: translateY(-50%);
+      border: 5px solid transparent;
+      border-right-color: #0f172a;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.15s ease;
+      pointer-events: none;
+      z-index: 1000;
+    }
+    .sidebar-collapsed .nav-link:hover::after,
+    .sidebar-collapsed .nav-link:hover::before {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .main-content {
+      flex: 1;
+      margin-left: var(--sidebar-width);
+      padding: 2rem 2.5rem;
+      width: calc(100% - var(--sidebar-width));
+      max-width: 100%;
+      transition: margin-left var(--transition-speed) cubic-bezier(0.4, 0, 0.2, 1), width var(--transition-speed) cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .sidebar-collapsed .main-content {
+      margin-left: var(--sidebar-collapsed-width);
+      width: calc(100% - var(--sidebar-collapsed-width));
+    }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+      gap: 1rem;
+    }
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .sidebar-toggle-btn {
+      background: white;
+      border: 1px solid var(--glass-border);
+      color: var(--text-main);
+      width: 38px;
+      height: 38px;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+      transition: all 0.2s ease;
+      font-size: 0.95rem;
+    }
+    .sidebar-toggle-btn:hover {
+      background: #f8fafc;
+      border-color: #cbd5e1;
+      color: var(--primary);
+    }
+    .topbar-user {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-weight: 500;
+      font-size: 0.9rem;
+    }
+    .role-badge {
+      display: inline-block;
+      padding: 0.2rem 0.6rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: rgba(79, 70, 229, 0.1);
+      color: var(--primary);
+    }
+
+    @media (max-width: 768px) {
+      .sidebar {
+        transform: translateX(-100%);
+        width: var(--sidebar-width) !important;
+        transition: transform var(--transition-speed) ease;
+      }
+      .sidebar-open .sidebar {
+        transform: translateX(0);
+      }
+      .main-content {
+        margin-left: 0 !important;
+        width: 100% !important;
+        padding: 1.25rem 1rem;
+      }
+      .sidebar-collapsed .main-content {
+        margin-left: 0 !important;
+        width: 100% !important;
+      }
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.625rem 1.25rem;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s;
+      border: none;
+    }
+    .btn-sm {
+      padding: 0.375rem 0.75rem;
+      font-size: 0.8rem;
+      border-radius: 6px;
+    }
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-primary:hover { background: var(--primary-hover); transform: translateY(-1px); }
+    .btn-outline { background: white; border: 1px solid var(--glass-border); color: var(--text-main); }
+    .btn-outline:hover { background: #f8fafc; border-color: #cbd5e1; }
+    .btn-danger { background: #ef4444; color: white; }
+    .btn-danger:hover { background: #dc2626; }
+    .btn-success { background: #10b981; color: white; }
+    .btn-success:hover { background: #059669; }
+
+    /* Cards */
+    .card {
+      background: var(--glass-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border);
+      border-radius: 14px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      box-shadow: var(--glass-shadow);
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.25rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--glass-border);
+    }
+    .card-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    /* Forms */
+    .form-group {
+      margin-bottom: 1.25rem;
+    }
+    .form-group label {
+      display: block;
+      margin-bottom: 0.4rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+    .form-control {
+      width: 100%;
+      padding: 0.625rem 0.875rem;
+      border-radius: 8px;
+      border: 1px solid #cbd5e1;
+      font-size: 0.9rem;
+      background: white;
+      color: var(--text-main);
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .form-control:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+    }
+    textarea.form-control {
+      resize: vertical;
+    }
+
+    /* Tables */
+    .table-responsive {
+      overflow-x: auto;
+      border-radius: 10px;
+      border: 1px solid var(--glass-border);
+      background: white;
+      width: 100%;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+    th, td {
+      padding: 0.875rem 1.25rem;
+      border-bottom: 1px solid var(--glass-border);
+      font-size: 0.875rem;
+      white-space: nowrap;
+    }
+    th {
+      background: #f8fafc;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+    tr:last-child td {
+      border-bottom: none;
+    }
+    tr:hover td {
+      background: #f8fafc;
+    }
+
+    /* Badges */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.25rem 0.65rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .badge-available { background: var(--status-available-bg); color: var(--status-available-text); }
+    .badge-shipped { background: var(--status-shipped-bg); color: var(--status-shipped-text); }
+    .badge-loaned { background: var(--status-loaned-bg); color: var(--status-loaned-text); }
+    .badge-scrapped { background: var(--status-scrapped-bg); color: var(--status-scrapped-text); }
+    .badge-repair { background: var(--status-repair-bg); color: var(--status-repair-text); }
+    .badge-secondary { background: #f1f5f9; color: #475569; }
+
+    /* Alerts */
+    .messages { margin-bottom: 1.5rem; }
+    .alert {
+      padding: 1rem 1.25rem;
+      border-radius: 10px;
+      margin-bottom: 0.75rem;
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .alert-success { background: rgba(16, 185, 129, 0.1); color: #059669; border: 1px solid rgba(16, 185, 129, 0.2); }
+    .alert-error { background: rgba(239, 68, 68, 0.1); color: #dc2626; border: 1px solid rgba(239, 68, 68, 0.2); }
+    .alert-warning { background: rgba(245, 158, 11, 0.1); color: #b45309; border: 1px solid rgba(245, 158, 11, 0.2); }
+    .alert-info { background: rgba(59, 130, 246, 0.1); color: #1d4ed8; border: 1px solid rgba(59, 130, 246, 0.2); }
+
+    /* Pagination */
+    .pagination-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 1.25rem;
+      font-size: 0.875rem;
+      color: var(--text-muted);
+    }
+  </style>
+  <script>
+    (function() {
+      try {
+        if (localStorage.getItem('crm_sidebar_collapsed') === 'true') {
+          document.documentElement.classList.add('sidebar-collapsed');
+        }
+      } catch (e) {}
+    })();
+  </script>
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+  <!-- Grouped Sidebar Navigation -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <a class="sidebar-brand" href="{% if can_view_crm %}{% url 'dashboard' %}{% else %}{% url 'hardware-dashboard' %}{% endif %}" title="CRM Server">
+        <i class="fa-solid fa-cube sidebar-brand-icon"></i>
+        <span class="brand-text">CRM Server</span>
+      </a>
+      <button type="button" id="sidebar-collapse-btn" class="sidebar-collapse-btn" title="收合側邊欄" aria-label="收合側邊欄">
+        <i class="fa-solid fa-chevron-left"></i>
+      </button>
+    </div>
+
+    <div class="nav-links">
+      {% if can_view_crm %}
+      <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'dashboard' %}" data-tooltip="總覽儀表板">
+        <i class="fa-solid fa-chart-pie"></i>
+        <span class="nav-text">總覽儀表板</span>
+      </a>
+      {% endif %}
+      <a class="nav-link {% if request.resolver_match.url_name == 'account-center' %}active{% endif %}" href="{% url 'account-center' %}" data-tooltip="個人帳號中心">
+        <i class="fa-solid fa-id-card-clip"></i>
+        <span class="nav-text">個人帳號中心</span>
+      </a>
+
+      {% if can_view_crm %}
+      <!-- 👥 CRM & 合約管理分區 -->
+      <div class="nav-section-title">CRM 客戶與維護合約</div>
+      <a class="nav-link {% if 'customer' in request.resolver_match.url_name and 'contract' not in request.resolver_match.url_name and request.resolver_match.url_name != 'customer-custom-fields' %}active{% endif %}" href="{% url 'customer-list' %}" data-tooltip="客戶名冊">
+        <i class="fa-solid fa-building-user"></i>
+        <span class="nav-text">客戶名冊</span>
+      </a>
+      {% if can_edit_customers or can_manage_system or request.user.is_superuser %}
+      <a class="nav-link {% if request.resolver_match.url_name == 'customer-custom-fields' %}active{% endif %}" href="{% url 'customer-custom-fields' %}" data-tooltip="客戶自訂欄位">
+        <i class="fa-solid fa-sliders"></i>
+        <span class="nav-text">客戶自訂欄位</span>
+      </a>
+      {% endif %}
+      <a class="nav-link {% if 'contract' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'contract-list' %}" data-tooltip="維護合約預警">
+        <i class="fa-solid fa-file-contract"></i>
+        <span class="nav-text" style="display: flex; align-items: center; justify-content: space-between; flex: 1;">
+          <span>維護合約預警</span>
+          {% if nav_pending_contracts_count > 0 %}
+            <span style="background: #ef4444; color: #fff; font-size: 0.7rem; font-weight: 700; padding: 1px 6px; border-radius: 999px; margin-left: 6px;" title="有 {{ nav_pending_contracts_count }} 筆維護合約待覆核">{{ nav_pending_contracts_count }}</span>
+          {% endif %}
+        </span>
+      </a>
+
+      <!-- 📦 軟體產品與授權分區 -->
+      <div class="nav-section-title">軟體產品與授權</div>
+      <a class="nav-link {% if 'license' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'license-list' %}" data-tooltip="客戶授權清單">
+        <i class="fa-solid fa-certificate"></i>
+        <span class="nav-text" style="display: flex; align-items: center; justify-content: space-between; flex: 1;">
+          <span>客戶授權清單</span>
+          {% if nav_pending_licenses_count > 0 %}
+            <span style="background: #ef4444; color: #fff; font-size: 0.7rem; font-weight: 700; padding: 1px 6px; border-radius: 999px; margin-left: 6px;" title="有 {{ nav_pending_licenses_count }} 筆授權書待覆核">{{ nav_pending_licenses_count }}</span>
+          {% endif %}
+        </span>
+      </a>
+      <a class="nav-link {% if 'product' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'product-list' %}" data-tooltip="軟體產品主檔">
+        <i class="fa-solid fa-shapes"></i>
+        <span class="nav-text">軟體產品主檔</span>
+      </a>
+      {% endif %}
+
+      <!-- 🖥️ 硬體設備與資產分區 -->
+      <div class="nav-section-title">硬體設備與資產</div>
+      <a class="nav-link {% if 'hardware-dashboard' in request.resolver_match.url_name or 'probe-dashboard' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'hardware-dashboard' %}" data-tooltip="資產儀表板">
+        <i class="fa-solid fa-gauge-high"></i>
+        <span class="nav-text">資產儀表板</span>
+      </a>
+      <a class="nav-link {% if 'hardware-list' in request.resolver_match.url_name or 'hardware-detail' in request.resolver_match.url_name or 'hardware-create' in request.resolver_match.url_name or 'probe-list' in request.resolver_match.url_name or 'probe-detail' in request.resolver_match.url_name or 'probe-create' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'hardware-list' %}" data-tooltip="設備庫存">
+        <i class="fa-solid fa-boxes-stacked"></i>
+        <span class="nav-text" style="display: flex; align-items: center; justify-content: space-between; flex: 1;">
+          <span>設備庫存</span>
+          {% if nav_pending_hardware_count > 0 %}
+            <span style="background: #ef4444; color: #fff; font-size: 0.7rem; font-weight: 700; padding: 1px 6px; border-radius: 999px; margin-left: 6px;" title="有 {{ nav_pending_hardware_count }} 台設備出庫待覆核">{{ nav_pending_hardware_count }}</span>
+          {% endif %}
+        </span>
+      </a>
+      <a class="nav-link {% if 'hardware-model' in request.resolver_match.url_name or 'probe-model' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'hardware-models' %}" data-tooltip="規格主檔">
+        <i class="fa-solid fa-microchip"></i>
+        <span class="nav-text">規格主檔</span>
+      </a>
+      <a class="nav-link {% if 'hardware-supplier' in request.resolver_match.url_name or 'probe-supplier' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'hardware-suppliers' %}" data-tooltip="供應商">
+        <i class="fa-solid fa-truck-field"></i>
+        <span class="nav-text">供應商</span>
+      </a>
+      <a class="nav-link {% if 'transaction' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'hardware-transactions' %}" data-tooltip="異動交易歷程">
+        <i class="fa-solid fa-clock-rotate-left"></i>
+        <span class="nav-text">異動交易歷程</span>
+      </a>
+
+      <!-- ⚙️ 系統設定分區 (管理員可見) -->
+      {% if can_manage_system or request.user.is_superuser %}
+      <div class="nav-section-title">系統全域設定</div>
+      <a class="nav-link {% if 'account' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'account-list' %}" data-tooltip="帳號與角色">
+        <i class="fa-solid fa-users-gear"></i>
+        <span class="nav-text">帳號與角色</span>
+      </a>
+      <a class="nav-link {% if 'ou-permission' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'ou-permissions' %}" data-tooltip="LDAP / AD 權限">
+        <i class="fa-solid fa-shield-halved"></i>
+        <span class="nav-text">LDAP / AD 權限</span>
+      </a>
+      <a class="nav-link {% if 'smtp-setting' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'smtp-settings' %}" data-tooltip="SMTP 郵件設定">
+        <i class="fa-solid fa-paper-plane"></i>
+        <span class="nav-text">SMTP 郵件設定</span>
+      </a>
+      <a class="nav-link {% if 'cert-template' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'cert-template-settings' %}" data-tooltip="證書底圖範本">
+        <i class="fa-solid fa-award"></i>
+        <span class="nav-text">證書底圖範本</span>
+      </a>
+      <a class="nav-link {% if 'audit' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'audit-log-list' %}" data-tooltip="審計日誌">
+        <i class="fa-solid fa-list-check"></i>
+        <span class="nav-text">審計日誌</span>
+      </a>
+      <a class="nav-link {% if 'db-migration' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'db-migration' %}" data-tooltip="資料庫切換">
+        <i class="fa-solid fa-database"></i>
+        <span class="nav-text">資料庫切換</span>
+      </a>
+      {% if request.user.is_superuser %}
+      <a class="nav-link {% if 'backup' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'backup-management' %}" data-tooltip="資料備份與還原">
+        <i class="fa-solid fa-box-archive"></i>
+        <span class="nav-text">資料備份與還原</span>
+      </a>
+      {% endif %}
+      {% endif %}
+    </div>
+  </aside>
+
+  <!-- Main Content Area -->
+  <main class="main-content">
+    <div class="topbar">
+      <div class="topbar-left">
+        <button type="button" id="sidebar-toggle-btn" class="sidebar-toggle-btn" title="收合 / 展開側邊欄" aria-label="切換側邊欄">
+          <i class="fa-solid fa-bars"></i>
+        </button>
+      </div>
+
+      <div class="topbar-right">
+        {% if request.user.is_authenticated %}
+          <div class="topbar-user">
+            <a href="{% url 'account-center' %}" style="display: inline-flex; align-items: center; gap: 0.45rem; text-decoration: none; color: var(--text-main);" title="進入個人帳號中心 (關注清單、留言紀錄與收信設定)">
+              <i class="fa-solid fa-circle-user fa-lg" style="color: var(--primary);"></i>
+              <span style="font-weight: 600;">{{ request.user.get_full_name|default:request.user.username }}</span>
+            </a>
+            <span class="role-badge">{{ user_role }}</span>
+            <a href="{% url 'account-center' %}" class="btn btn-outline btn-sm" title="個人帳號中心 (關注客戶、歷史留言、通知設定)">
+              <i class="fa-solid fa-user-gear" style="color: var(--primary);"></i> 帳號中心
+            </a>
+            {% if not request.user.profile.distinguished_name %}
+              <a href="{% url 'change-own-password' %}" class="btn btn-outline btn-sm" title="修改密碼">
+                <i class="fa-solid fa-key"></i>
+              </a>
+            {% endif %}
+          </div>
+          <form method="post" action="{% url 'logout' %}" style="display:inline;">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline btn-sm" title="登出系統">
+              <i class="fa-solid fa-arrow-right-from-bracket"></i> 登出
+            </button>
+          </form>
+        {% else %}
+          <a href="{% url 'login' %}?next={{ request.path }}" class="btn btn-primary btn-sm">
+            <i class="fa-solid fa-lock"></i> 登入系統
+          </a>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Messages -->
+    {% if messages %}
+      <div class="messages">
+        {% for message in messages %}
+          <div class="alert {% if message.tags %}alert-{{ message.tags }}{% endif %}">
+            {% if message.tags == 'success' %}
+              <i class="fa-solid fa-circle-check"></i>
+            {% elif message.tags == 'error' %}
+              <i class="fa-solid fa-triangle-exclamation"></i>
+            {% else %}
+              <i class="fa-solid fa-circle-info"></i>
+            {% endif %}
+            {{ message }}
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const toggleBtn = document.getElementById('sidebar-toggle-btn');
+      const collapseBtn = document.getElementById('sidebar-collapse-btn');
+      
+      function toggleSidebar() {
+        if (window.innerWidth <= 768) {
+          document.documentElement.classList.toggle('sidebar-open');
+        } else {
+          const isCollapsed = document.documentElement.classList.toggle('sidebar-collapsed');
+          try {
+            localStorage.setItem('crm_sidebar_collapsed', isCollapsed ? 'true' : 'false');
+          } catch (e) {}
+        }
+      }
+
+      if (toggleBtn) {
+        toggleBtn.addEventListener('click', toggleSidebar);
+      }
+      if (collapseBtn) {
+        collapseBtn.addEventListener('click', toggleSidebar);
+      }
+
+      // 記憶並還原側邊欄捲軸位置
+      const sidebar = document.querySelector('.sidebar');
+      if (sidebar) {
+        const savedScroll = sessionStorage.getItem('crm_sidebar_scroll');
+        if (savedScroll !== null) {
+          sidebar.scrollTop = parseInt(savedScroll, 10);
+        } else {
+          const activeItem = sidebar.querySelector('.nav-link.active');
+          if (activeItem) {
+            activeItem.scrollIntoView({ block: 'nearest' });
+          }
+        }
+
+        let scrollTimeout;
+        sidebar.addEventListener('scroll', function() {
+          clearTimeout(scrollTimeout);
+          scrollTimeout = setTimeout(function() {
+            sessionStorage.setItem('crm_sidebar_scroll', sidebar.scrollTop);
+          }, 80);
+        }, { passive: true });
+
+        window.addEventListener('beforeunload', function() {
+          sessionStorage.setItem('crm_sidebar_scroll', sidebar.scrollTop);
+        });
+      }
+    });
+  </script>
+
+  {% if request.user.is_authenticated %}
+  <script>
+    (function() {
+      // 閒置自動登出監聽器 (各分頁獨立計時，無操作逾時後強制登出)
+      var timeoutMinutes = {{ idle_timeout_minutes|default:10 }};
+      if (timeoutMinutes <= 0) return;
+
+      var timeoutMs = timeoutMinutes * 60 * 1000;
+      var idleTimer = null;
+      var lastReset = Date.now();
+
+      function triggerLogout() {
+        window.location.href = "{% url 'logout' %}?auto=1";
+      }
+
+      function resetIdleTimer() {
+        if (idleTimer) {
+          clearTimeout(idleTimer);
+        }
+        idleTimer = setTimeout(triggerLogout, timeoutMs);
+      }
+
+      function onUserActivity() {
+        var now = Date.now();
+        // 限制至少間隔 1.5 秒才重設計時器，避免密集事件 (如 mousemove, scroll) 浪費運算資源
+        if (now - lastReset > 1500) {
+          lastReset = now;
+          resetIdleTimer();
+        }
+      }
+
+      var events = ['mousemove', 'mousedown', 'keydown', 'keypress', 'scroll', 'touchstart', 'wheel'];
+      events.forEach(function(evt) {
+        window.addEventListener(evt, onUserActivity, { passive: true });
+      });
+
+      // 初始化啟動計時器
+      resetIdleTimer();
+    })();
+  </script>
+  {% endif %}
+  {% if request.user.is_authenticated %}
+    {% if can_view_crm or can_manage_system or request.user.is_superuser %}
+      {% include "components/certificate_export_modal.html" %}
+    {% endif %}
+  {% endif %}
+  {% block extra_scripts %}{% endblock %}
+</body>
+</html>

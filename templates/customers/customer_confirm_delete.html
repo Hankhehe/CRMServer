@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}確認刪除客戶 - CRM Server{% endblock %}
+
+{% block content %}
+<div style="max-width: 600px; margin: 2rem auto;">
+  <div class="card" style="border-top: 4px solid #ef4444;">
+    <h2 style="font-size: 1.35rem; color: #dc2626; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+      <i class="fa-solid fa-triangle-exclamation"></i> 確認刪除客戶
+    </h2>
+    <p style="font-size: 0.95rem; margin-bottom: 1.5rem; line-height: 1.6;">
+      您確定要刪除客戶「<strong>{{ customer.name }} ({{ customer.code }})</strong>」嗎？<br>
+      <span style="color: #ef4444; font-size: 0.85rem;">警告：這將會一併移除該客戶關聯的所有聯絡窗口與合約紀錄。</span>
+    </p>
+    {% if children_list %}
+      <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 8px; padding: 0.85rem 1rem; margin-bottom: 1.5rem; font-size: 0.88rem; color: #92400e;">
+        <div style="font-weight: 700; margin-bottom: 0.35rem;">
+          <i class="fa-solid fa-sitemap"></i> 下層客戶關聯提醒（共 {{ children_list|length }} 家直屬下層客戶）：
+        </div>
+        <div>
+          刪除此客戶<strong>不會</strong>刪除其下層客戶，以下客戶的「上層客戶」欄位將自動重設為無上層：
+          <div style="margin-top: 0.35rem; font-weight: 600;">
+            {% for ch in children_list %}[{{ ch.code }}] {{ ch.name }}{% if not forloop.last %}、{% endif %}{% endfor %}
+          </div>
+        </div>
+      </div>
+    {% endif %}
+
+    <form method="post" style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+      {% csrf_token %}
+      <a href="{% url 'customer-detail' customer.pk %}" class="btn btn-outline">取消</a>
+      <button type="submit" class="btn btn-danger">
+        <i class="fa-solid fa-trash"></i> 確認刪除
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}

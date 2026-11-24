@@ -1,0 +1,288 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - CRM Server{% endblock %}
+
+{% block content %}
+<div style="max-width: 860px; margin: 0 auto; padding-bottom: 3rem;">
+  <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem;">
+    <div style="display: flex; align-items: center; gap: 1rem;">
+      <a href="{% url 'account-list' %}?tab=roles" class="btn btn-outline btn-sm"><i class="fa-solid fa-arrow-left"></i> 返回角色列表</a>
+      <h1 style="font-size: 1.5rem; font-weight: 700; margin: 0;">{{ title }}</h1>
+    </div>
+  </div>
+
+  <form method="post">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+      <div class="card" style="border-left: 4px solid #ef4444; background: rgba(239, 68, 68, 0.08); margin-bottom: 1.5rem; padding: 1rem;">
+        {% for err in form.non_field_errors %}
+          <div style="color: #ef4444; font-size: 0.9rem;"><i class="fa-solid fa-circle-exclamation"></i> {{ err }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <!-- 區塊一：快速載入預設角色範本 -->
+    <div class="card" style="margin-bottom: 1.5rem; border: 1px solid rgba(59, 130, 246, 0.3); background: rgba(59, 130, 246, 0.03);">
+      <div style="font-size: 1.05rem; font-weight: 600; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem; color: #3b82f6;">
+        <i class="fa-solid fa-wand-magic-sparkles"></i> 快速套用預設範本
+      </div>
+      <div class="form-group" style="margin-bottom: 0;">
+        <label for="id_template_preset" style="font-weight: 500;">選取範本以自動帶入模組勾選：</label>
+        {{ form.template_preset }}
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.35rem;">
+          💡 <strong>使用技巧</strong>：選取範本後系統會自動勾選對應的業務模組與視野設定，您可在此基礎上自由加勾、減勾並自訂角色名稱儲存。
+        </div>
+      </div>
+    </div>
+
+    <!-- 區塊二：角色基本屬性 -->
+    <div class="card" style="margin-bottom: 1.5rem;">
+      <div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; border-bottom: 1px solid var(--glass-border); padding-bottom: 0.5rem;">
+        <i class="fa-solid fa-id-card-clip" style="color: var(--primary);"></i> 角色基本屬性
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem;">
+        <div class="form-group">
+          <label>{{ form.name.label }} <span style="color:#ef4444;">*</span></label>
+          {{ form.name }}
+          {% if form.name.errors %}<div style="color: #ef4444; font-size: 0.8rem; margin-top: 0.25rem;">{{ form.name.errors.0 }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+          <label>{{ form.code.label }} <span style="color:#ef4444;">*</span></label>
+          {{ form.code }}
+          <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">唯一系統代碼（英數、減號或底線），例如: <code>sales_lead</code></div>
+          {% if form.code.errors %}<div style="color: #ef4444; font-size: 0.8rem; margin-top: 0.25rem;">{{ form.code.errors.0 }}</div>{% endif %}
+        </div>
+
+        <div class="form-group" style="grid-column: 1 / -1;">
+          <label>{{ form.description.label }}</label>
+          {{ form.description }}
+          {% if form.description.errors %}<div style="color: #ef4444; font-size: 0.8rem; margin-top: 0.25rem;">{{ form.description.errors.0 }}</div>{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- 區塊三：五大業務模組權限勾選面板 -->
+    <div style="margin-bottom: 1.5rem;">
+      <div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+        <i class="fa-solid fa-cubes" style="color: var(--primary);"></i> 功能權限勾選與設定 (Permissions)
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 1rem;">
+
+        <!-- 模組 1: 客戶資料管理 -->
+        <div class="card" style="display: flex; flex-direction: column; justify-content: space-between; margin-bottom: 0;">
+          <div>
+            <strong style="font-size: 1rem; color: var(--text-main);"><i class="fa-solid fa-users-gear" style="color: #10b981; margin-right: 6px;"></i> 客戶資料管理模組</strong>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.35rem; margin-bottom: 0.75rem;">
+              控管客戶名冊、各客戶分公司/單位環境資訊及聯絡窗口名單。
+            </p>
+          </div>
+          <div style="padding-top: 0.75rem; border-top: 1px solid var(--glass-border);">
+            <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; margin: 0;">
+              {{ form.can_edit_customers }}
+              <div>
+                <span style="font-weight: 600; font-size: 0.9rem;">可新增 / 編輯 / 刪除客戶與聯絡人</span>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">未勾選時僅可檢視與搜尋客戶名冊及留下執行軌跡。</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- 模組 2: 授權書與保固合約 -->
+        <div class="card" style="display: flex; flex-direction: column; justify-content: space-between; margin-bottom: 0;">
+          <div>
+            <strong style="font-size: 1rem; color: var(--text-main);"><i class="fa-solid fa-file-contract" style="color: #8b5cf6; margin-right: 6px;"></i> 授權與保固合約模組</strong>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.35rem; margin-bottom: 0.75rem;">
+              控管軟體產品正式授權書開立、維護合約年約簽署及合約 RMA 換機作業。
+            </p>
+          </div>
+          <div style="padding-top: 0.75rem; border-top: 1px solid var(--glass-border);">
+            <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; margin: 0;">
+              {{ form.can_edit_licenses }}
+              <div>
+                <span style="font-weight: 600; font-size: 0.9rem;">可開立 / 編輯軟體授權書與保固合約</span>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">未勾選時僅可查閱各客戶之生效與即將到期合約。</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- 模組 3: 軟體產品主檔 -->
+        <div class="card" style="display: flex; flex-direction: column; justify-content: space-between; margin-bottom: 0;">
+          <div>
+            <strong style="font-size: 1rem; color: var(--text-main);"><i class="fa-solid fa-box-archive" style="color: #f59e0b; margin-right: 6px;"></i> 軟體產品主檔模組</strong>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.35rem; margin-bottom: 0.75rem;">
+              維護全系統之軟體產品清單、版本定義及動態自訂欄位 Config Schema。
+            </p>
+          </div>
+          <div style="padding-top: 0.75rem; border-top: 1px solid var(--glass-border);">
+            <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; margin: 0;">
+              {{ form.can_edit_products }}
+              <div>
+                <span style="font-weight: 600; font-size: 0.9rem;">可維護軟體產品與規格主檔 Config</span>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">未勾選時僅供開立授權書時唯讀下拉選取產品。</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- 模組 4: 硬體設備庫存與資產 -->
+        <div class="card" style="display: flex; flex-direction: column; justify-content: space-between; margin-bottom: 0;">
+          <div>
+            <strong style="font-size: 1rem; color: var(--text-main);"><i class="fa-solid fa-server" style="color: #06b6d4; margin-right: 6px;"></i> 硬體設備與庫存模組</strong>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.35rem; margin-bottom: 0.75rem;">
+              硬體設備庫存入庫、出貨指派、業務借測歸還、硬體型號規格與供應商。
+            </p>
+          </div>
+          <div style="padding-top: 0.75rem; border-top: 1px solid var(--glass-border); display: flex; flex-direction: column; gap: 0.5rem;">
+            <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; margin: 0;">
+              {{ form.can_edit_probes }}
+              <div>
+                <span style="font-weight: 600; font-size: 0.9rem;">可操作硬體出入庫、借測歸還與規格維護</span>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">未勾選時為唯讀庫存查詢狀態。</div>
+              </div>
+            </label>
+            <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; margin: 0; padding-top: 0.5rem; border-top: 1px dashed var(--glass-border);">
+              {{ form.can_view_crm }}
+              <div>
+                <span style="font-weight: 600; font-size: 0.9rem;">可瀏覽 CRM 客戶與合約選單</span>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">若取消勾選，套用此角色者將僅能查閱硬體庫存，登入直接導向硬體儀表板。</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- 模組 5: 系統管理與安全 -->
+        <div class="card" style="display: flex; flex-direction: column; justify-content: space-between; margin-bottom: 0; grid-column: 1 / -1;">
+          <div>
+            <strong style="font-size: 1rem; color: var(--text-main);"><i class="fa-solid fa-gears" style="color: #ec4899; margin-right: 6px;"></i> 系統設定與安全模組</strong>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.35rem; margin-bottom: 0.75rem;">
+              管理系統後台設定：AD LDAP 連線、安全群組映射、SMTP 郵件、帳號角色管理與審計日誌。
+            </p>
+          </div>
+          <div style="padding-top: 0.75rem; border-top: 1px solid var(--glass-border);">
+            <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; margin: 0;">
+              {{ form.can_manage_system }}
+              <div>
+                <span style="font-weight: 600; font-size: 0.9rem;">可維護系統設定 (AD / SMTP / 帳號角色 / 審計日誌)</span>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">建議僅指派給系統管理者或 IT 人員角色。</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- 模組 6: 簽核覆核權限 -->
+        <div class="card" style="display: flex; flex-direction: column; justify-content: space-between; margin-bottom: 0; grid-column: 1 / -1; border: 1px solid rgba(139, 92, 246, 0.25);">
+          <div>
+            <strong style="font-size: 1rem; color: var(--text-main);"><i class="fa-solid fa-stamp" style="color: #8b5cf6; margin-right: 6px;"></i> 單據簽核覆核權限模組 (Approval Authority)</strong>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.35rem; margin-bottom: 0.75rem;">
+              當系統開啟對應簽核開關時，具備覆核權限的角色可審核放行或退回其他人員開立之單據，且自身開單時直接核准生效。
+            </p>
+          </div>
+          <div style="padding-top: 0.75rem; border-top: 1px solid var(--glass-border); display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0.75rem;">
+            <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; margin: 0;">
+              {{ form.can_approve_licenses }}
+              <div>
+                <span style="font-weight: 600; font-size: 0.9rem;">可覆核「軟體授權書」</span>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">核准或退回待審之客戶軟體授權書。</div>
+              </div>
+            </label>
+            <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; margin: 0;">
+              {{ form.can_approve_contracts }}
+              <div>
+                <span style="font-weight: 600; font-size: 0.9rem;">可覆核「維護保固合約」</span>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">核准或退回待審之維護保固合約。</div>
+              </div>
+            </label>
+            <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; margin: 0;">
+              {{ form.can_approve_hardware }}
+              <div>
+                <span style="font-weight: 600; font-size: 0.9rem;">可覆核「硬體設備出庫」</span>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">核准或退回出貨、借測及合約換機出庫申請。</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- 區塊四：客戶資料視野範圍 (Data Scope) -->
+    <div class="card" style="margin-bottom: 2rem;">
+      <div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem; border-bottom: 1px solid var(--glass-border); padding-bottom: 0.5rem;">
+        <i class="fa-solid fa-eye" style="color: var(--primary);"></i> 客戶資料視野範圍 (Data Scope)
+      </div>
+      <div class="form-group" style="margin-bottom: 0;">
+        <label for="id_customer_scope" style="font-weight: 500;">視野設定：</label>
+        {{ form.customer_scope }}
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.5rem;">
+          🌐 <strong>全域可見</strong>：套用此角色的帳號可檢視與搜尋公司所有客戶名冊、合約與授權。<br/>
+          🔒 <strong>僅限已關注客戶</strong>：業務資料隔離模式，套用此角色的帳號僅能查閱、搜尋自己負責或已關注之客戶。
+        </div>
+      </div>
+    </div>
+
+    <!-- 底部操作按鈕 -->
+    <div style="display: flex; justify-content: flex-end; gap: 1rem; padding-top: 1rem; border-top: 1px solid var(--glass-border);">
+      <a href="{% url 'account-list' %}?tab=roles" class="btn btn-outline">取消返回</a>
+      <button type="submit" class="btn btn-primary" style="padding: 0.65rem 1.75rem; font-weight: 600;">
+        <i class="fa-solid fa-floppy-disk"></i> 儲存角色設定
+      </button>
+    </div>
+  </form>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const presetSelect = document.getElementById('id_template_preset');
+    if (!presetSelect) return;
+
+    const PRESETS = {{ system_presets|safe }};
+
+    presetSelect.addEventListener('change', function() {
+      const code = this.value;
+      if (!code || !PRESETS[code]) return;
+
+      const p = PRESETS[code];
+      const nameInput = document.getElementById('id_name');
+      const descInput = document.getElementById('id_description');
+      const codeInput = document.getElementById('id_code');
+      const scopeSelect = document.getElementById('id_customer_scope');
+
+      if (nameInput && (!nameInput.value || nameInput.value.trim() === '')) {
+        nameInput.value = p.name;
+      }
+      if (codeInput && (!codeInput.value || codeInput.value.trim() === '')) {
+        codeInput.value = code;
+      }
+      if (descInput && (!descInput.value || descInput.value.trim() === '')) {
+        descInput.value = p.description;
+      }
+      if (scopeSelect) {
+        scopeSelect.value = p.customer_scope || 'all';
+      }
+
+      const flags = [
+        'can_view_crm',
+        'can_edit_customers',
+        'can_edit_licenses',
+        'can_edit_products',
+        'can_edit_probes',
+        'can_manage_system',
+        'can_approve_licenses',
+        'can_approve_contracts',
+        'can_approve_hardware'
+      ];
+      flags.forEach(function(k) {
+        const cb = document.getElementById('id_' + k);
+        if (cb && p[k] !== undefined) {
+          cb.checked = Boolean(p[k]);
+        }
+      });
+    });
+  });
+</script>
+{% endblock %}
