@@ -1,91 +1,120 @@
-# CRM Server - 客戶關係、維護合約與 Probe 資產管理系統
+# CRM Server - 客戶關係、維護合約、軟體授權與硬體資產管理系統
 
-本專案為自原先巢狀架構抽離後之獨立 CRM Server，徹底剔除 Techresource (Trello 依賴)，以客戶為核心，整合硬體設備庫存 (Probe) 與企業級 LDAP/AD 雙軌授權。
+本專案為獨立之企業級 CRM Server，以客戶為核心，整合維護合約、軟體授權、硬體設備庫存 (`apps/hardware`)、簽核流程、證書匯出與企業級 LDAP/AD 雙軌認證，並支援 **SQLite / PostgreSQL / Microsoft SQL Server (MS-SQL)** 三資料庫引擎切換與自動結構升級。
 
 ---
 
 ## 🌟 核心功能架構
 
 ### 1. 👥 客戶與維護合約模組 (`apps/customers`)
-* **客戶主檔管理 (`Customer`)**：
-  * 客戶代號 (`code`) 為全系統唯一值（支援統一編號或機構自訂代號）。
-  * 支援以客戶代號與客戶名稱雙欄位模糊搜尋。
-  * 包含客戶基本聯絡資訊、地址、統編與備註。
-* **多窗口聯絡人名冊 (`ContactPerson`)**：
-  * 單一客戶支援維護多位聯絡人（含職稱/部門、分機、手機、Email）。
-  * 支援設定「主要聯絡人」，變更時自動同步至客戶主檔。
-* **維護合約預警中心 (`MaintenanceContract`)**：
-  * 支援單一客戶多份歷史與續約合約。
-  * 即時計算合約到期倒數天數，提供 **30 天內即將到期紅黃燈預警**。
-  * 整合服務等級 (SLA) 紀錄與合約金額。
+* **客戶主檔管理 (`Customer`)**：支援客戶階層樹、唯一客戶代號／統編、雙欄位模糊搜尋、自訂欄位與互動歷程附件。
+* **多窗口聯絡人名冊 (`ContactPerson`)**：單一客戶支援多位聯絡人與主要聯絡人同步。
+* **維護合約預警中心 (`MaintenanceContract`)**：支援多份歷史／續約合約、附件管理與 **30 天內到期預警**。
 
 ### 2. 📦 軟體產品與授權管理模組 (`apps/licenses`)
-* **軟體產品與功能模組庫 (`Product`, `ProductModule`)**：
-  * 管理軟體產品代號、名稱、計量單位（台/節點/核心）與可選購開通之模組庫。
-  * **動態擴充欄位規格 (JSON Schema)**：產品主檔可自訂特殊規格參數（如頻寬、HA 架構、部署平台），授權表單自動動態呈現輸入欄位，無痛適應未來多元計費與規格變更。
-* **客戶軟體授權書管理 (`CustomerLicense`, `CustomerLicenseModule`)**：
-  * 記錄採購客戶、授權模式（永久買斷、定期訂閱、測試）、使用數量、到期日與開通模組。
-  * 支援 30 天內訂閱到期狀態警示徽章與倒數天數。
-  * 授權金鑰 (License Key) 與備註憑證管理。
-* **軟硬體雙向勾稽（配額與序號綁定）**：
-  * 出貨硬體 Probe 時可直接綁定至對應的軟體授權書。
-  * 系統即時統計「授權總額度 vs 已出貨台數 vs 剩餘未出貨額度」，支援庫存備貨評估與換機維護。
+* **軟體產品主檔 (`Product`)**：管理產品代號、計量單位與動態擴充欄位規格 (JSON Schema)。
+* **客戶軟體授權書管理 (`CustomerLicense`)**：支援永久買斷、訂閱與測試授權、到期預警、授權／保固簽核流程與證書匯出。
+* **軟硬體雙向勾稽**：硬體出貨時可直接綁定軟體授權書並即時統計配額。
 
-### 3. 🖥️ Probe 設備與庫存模組 (`apps/probes`)
-* **Probe 設備庫存主檔 (`Probe`)**：
-  * 完整序號追蹤、型號規格關聯、供應商、庫存狀態（庫存中、已出貨、借測中、已報廢）。
-  * 借測歸還預警：支援設定預計歸還日與逾期警示。
-  * 硬體客製覆寫：支援個別設備的連接埠數 (Ports)、CPU、RAM、硬碟規格自訂覆寫。
-* **規格型號與供應商 (`ProbeModelDetail`, `Supplier`)**：
-  * 管理設備標準規格主檔與即時庫存水位統計。
-* **庫存異動交易日誌 (`InventoryTransaction`)**：
-  * 完整記錄進貨入庫、正式出貨、客戶借測、借測歸還、出貨退貨、設備報廢流程。
-  * 自動產生流向歷程與操作人員審計資訊。
+### 3. 🖥️ 硬體設備與庫存模組 (`apps/hardware`)
+* **硬體設備庫存主檔 (`HardwareDevice`)**：完整序號追蹤、型號規格、供應商、庫存狀態、借測歸還預警與客製硬體覆寫。
+* **庫存異動與出貨簽核 (`InventoryTransaction`, `HardwareOutboundApproval`)**：完整記錄入庫、出貨、借測、歸還、退貨與報廢流程及審計資訊。
 
 ### 4. ⚙️ 系統核心與安全授權 (`apps/core`)
-* **總覽儀表板 (`Dashboard`)**：
-  * 整合 CRM 統計、Probe 庫存水位、30 天內合約到期預警清單、借測中逾期設備與最新交易歷程。
-* **企業級 AD / LDAP 雙軌認證**：
-  * 支援本機帳號與 Active Directory 網域帳號無縫切換登入。
-  * 支援將 AD 安全群組對應至系統模組角色。
-* **模組化角色權限 (RBAC)**：
-  * **全域管理員 (all_admin)**：可操作所有功能與系統設定。
-  * **CRM 合約管理員 (crm_admin)**：專責客戶名冊、窗口維護與維護合約。
-  * **Probe 設備管理員 (probe_admin)**：專責設備庫存、規格、供應商與庫存交易。
-  * **純檢視者 (view)**：僅供查詢，隱藏編輯與異動按鈕。
-* **雙資料庫熱切換**：
-  * 支援 SQLite 與 Microsoft SQL Server (MSSQL) 雙向遷移與配置。
+* **總覽儀表板 (`Dashboard`)**：彙整客戶、合約到期、授權與硬體庫存警示。
+* **企業級 AD / LDAP 雙軌認證與 RBAC**：支援本機帳號與 AD 網域帳號登入、AD 群組對應系統角色。
+* **三資料庫熱切換與自動遷移**：支援 SQLite、PostgreSQL、MS-SQL 線上遷移與 `AutoMigrate` 自動升級。
+* **系統備份與還原**：支援後台一鍵匯出／還原資料庫與 `media/` 附件備份包。
 
 ---
 
-## 🚀 啟動與操作指南
+## 🚀 快速開始（首次拉取程式碼）
 
-### 1. 啟動開發伺服器
+本專案不包含資料庫 (`db.sqlite3`)、連線設定 (`db_config.json`) 與上傳附件 (`media/*`)。首次 `git clone` 後，依以下步驟即可啟動使用：
+
+### 1. 取得程式碼並建立虛擬環境
+
+**Windows (PowerShell)**
 ```powershell
-# 啟動虛擬環境 (Windows PowerShell)
+git clone https://github.com/Hankhehe/CRMServer.git
+cd CRMServer
+
+# 建立並啟動虛擬環境
+python -m venv env
 .\env\Scripts\Activate.ps1
 
-# 啟動 Django 伺服器
+# 安裝相依套件
+pip install -r requirements.txt
+```
+
+**Linux / macOS**
+```bash
+git clone https://github.com/Hankhehe/CRMServer.git
+cd CRMServer
+
+python3 -m venv env
+source env/bin/activate
+pip install -r requirements.txt
+```
+
+### 2. 初始化資料庫與預設角色
+若未設定 `db_config.json`，系統預設使用根目錄的 `db.sqlite3`。執行以下指令會自動建立資料庫、所有資料表與內建權限角色：
+
+```powershell
+python manage.py migrate
+```
+
+### 3. 建立第一位超級管理員帳號
+由於全新的資料庫內沒有任何預設帳號，**必須先建立管理員帳號才能登入**：
+
+```powershell
+python manage.py createsuperuser
+```
+> 依提示輸入帳號（例如 `admin`）、Email（可留空）與密碼即可完成。
+
+### 4. 啟動伺服器
+```powershell
 python manage.py runserver 0.0.0.0:8000
 ```
-
-### 2. 預設管理員帳號
-* 帳號：`admin`
-* 密碼：原系統密碼
-* 登入網址：`http://127.0.0.1:8000/login/`
-
-### 3. 執行測試驗證
-```powershell
-python manage.py test
-```
+啟動後開啟瀏覽器前往：`http://127.0.0.1:8000/login/`，使用剛建立的管理員帳號登入即可開始使用。
 
 ---
 
-## 📊 資料遷移紀錄
-既有資料庫歷史紀錄已完整遷移至根目錄 `db.sqlite3`：
-* **客戶資料**：239 筆（代號自動初始化為 `CUST-01416` 等格式，可隨時修改）
-* **聯絡窗口**：90 筆主要窗口
-* **Probe 設備**：1,438 台
-* **庫存交易日誌**：2,801 筆完整歷程
-* **規格主檔**：7 種
-* **供應商**：2 家
+## ⚙️ 首次登入後建議設定（選用）
+
+登入超級管理員後，可直接在系統後台完成進階配置（皆儲存於資料庫或本機設定檔，無需修改程式碼）：
+
+1. **AD / LDAP 與 SMTP 設定**：於後台系統設定頁面填入 AD 伺服器 URI、Bind DN、密碼與 SMTP 寄信資訊（儲存於資料庫 `SystemSetting`）。
+2. **切換外部資料庫（PostgreSQL / MS-SQL）**：於後台「資料庫遷移」頁面輸入連線資訊並執行遷移，系統會自動搬移資料並於根目錄產生 `db_config.json`（已列入 `.gitignore`）。
+3. **還原既有資料**：若已有系統備份壓縮包（`.zip`），可於後台「系統備份與還原」頁面直接上傳還原資料庫與 `media/` 附件。
+
+---
+
+## 🔐 正式環境建議環境變數
+
+正式部署時，建議透過環境變數覆蓋以下設定（未設定時仍可於本機開發模式正常啟動）：
+
+| 環境變數 | 說明 |
+| :--- | :--- |
+| `DJANGO_SECRET_KEY` | Django 簽章密鑰（正式環境務必設定為高強度隨機字串） |
+| `CSRF_TRUSTED_ORIGINS` | 允許跨站請求之網域／IP 清單，以逗號分隔（例如 `https://crm.example.com,http://192.168.1.10:8000`） |
+| `LDAP_SERVER_URI` | （選用）LDAP fallback 伺服器 URI，系統優先讀取資料庫內的 `SystemSetting` |
+| `LDAP_BIND_DN` | （選用）LDAP fallback Bind DN |
+| `LDAP_BIND_PASSWORD` | （選用）LDAP fallback Bind Password |
+| `LDAP_BASE_DN` | （選用）LDAP fallback Base DN |
+| `LDAP_DOMAIN` | （選用）LDAP fallback 網域名稱 |
+
+---
+
+## 🧪 執行測試與檢查
+
+```powershell
+# 系統健康檢查
+python manage.py check
+
+# 確認沒有遺漏未產生的 Migration
+python manage.py makemigrations --check --dry-run
+
+# 執行自動化測試
+python manage.py test
+```
