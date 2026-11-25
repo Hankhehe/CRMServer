@@ -16,15 +16,9 @@ def _today_tw():
 
 def generate_order_no() -> str:
     """產生唯一預設訂單單號，格式: SO-YYYYMMDD-XXXX"""
-    today_str = timezone.now().astimezone(TAIPEI_TZ).strftime("%Y%m%d")
-    prefix = f"SO-{today_str}-"
-    existing_nos = Order.objects.filter(order_no__startswith=prefix).values_list("order_no", flat=True)
-    max_seq = 0
-    for code in existing_nos:
-        tail = code[len(prefix):]
-        if tail.isdigit():
-            max_seq = max(max_seq, int(tail))
-    return f"{prefix}{max_seq + 1:04d}"
+    from apps.core.numbering import generate_order_no as _gen_order_no
+
+    return _gen_order_no()
 
 
 class Order(models.Model):

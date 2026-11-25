@@ -135,7 +135,7 @@ class CustomerLicenseForm(forms.ModelForm):
             "note",
         ]
         widgets = {
-            "license_no": forms.TextInput(attrs={"class": "form-control", "placeholder": "例如: LIC-2026-001"}),
+            "license_no": forms.TextInput(attrs={"class": "form-control", "placeholder": "例如: L-20261125-0001"}),
             "quantity": forms.NumberInput(attrs={"class": "form-control", "min": 1}),
             "unit": forms.TextInput(attrs={"class": "form-control", "placeholder": "台 / 節點"}),
             "start_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date", "class": "form-control"}),
@@ -167,6 +167,18 @@ class CustomerLicenseForm(forms.ModelForm):
                 self._attach_dynamic_fields(selected_product)
             except Product.DoesNotExist:
                 pass
+
+    def clean_license_no(self):
+        from apps.core.numbering import generate_license_no, validate_unique_doc_no
+
+        return validate_unique_doc_no(
+            CustomerLicense,
+            "license_no",
+            self.cleaned_data.get("license_no", ""),
+            instance_pk=self.instance.pk if self.instance else None,
+            generator=generate_license_no,
+            label="軟體授權書編號",
+        )
 
     def _attach_dynamic_fields(self, product: Product):
         schema = product.custom_field_schema or []

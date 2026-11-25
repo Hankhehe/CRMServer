@@ -513,6 +513,9 @@ def license_create(request):
                 return redirect("customer-detail", pk=customer_id)
             return redirect("license-detail", pk=license_obj.pk)
     else:
+        from apps.core.numbering import generate_license_no
+
+        initial.setdefault("license_no", generate_license_no())
         form = CustomerLicenseForm(initial=initial)
         form.fields["customer"].queryset = filter_customers_for_user(request.user, Customer.objects.all())
 

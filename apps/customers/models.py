@@ -739,19 +739,9 @@ class CustomerFollow(models.Model):
 
 def generate_service_no() -> str:
     """產生唯一專業服務單號，格式: SRV-YYYYMMDD-XXXX"""
-    from zoneinfo import ZoneInfo
+    from apps.core.numbering import generate_service_no as _gen_service_no
 
-    today_str = timezone.now().astimezone(ZoneInfo("Asia/Taipei")).strftime("%Y%m%d")
-    prefix = f"SRV-{today_str}-"
-    existing = CustomerServiceRecord.objects.filter(service_no__startswith=prefix).values_list(
-        "service_no", flat=True
-    )
-    max_seq = 0
-    for code in existing:
-        tail = code[len(prefix):]
-        if tail.isdigit():
-            max_seq = max(max_seq, int(tail))
-    return f"{prefix}{max_seq + 1:04d}"
+    return _gen_service_no()
 
 
 class CustomerServiceRecord(models.Model):

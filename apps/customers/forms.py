@@ -312,7 +312,7 @@ class MaintenanceContractForm(forms.ModelForm):
         ]
         widgets = {
             "customer": forms.Select(attrs={"class": "form-control", "id": "id_customer"}),
-            "contract_no": forms.TextInput(attrs={"class": "form-control", "placeholder": "例如: MC-2026-001"}),
+            "contract_no": forms.TextInput(attrs={"class": "form-control", "placeholder": "例如: W-20261125-0001"}),
             "name": forms.TextInput(attrs={"class": "form-control", "placeholder": "合約全名 (選填)"}),
             "start_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date", "class": "form-control", "id": "id_start_date"}),
             "end_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date", "class": "form-control", "id": "id_end_date"}),
@@ -358,6 +358,18 @@ class MaintenanceContractForm(forms.ModelForm):
 
         self.fields["licenses"].required = False
         self.fields["probes"].required = False
+
+    def clean_contract_no(self):
+        from apps.core.numbering import generate_contract_no, validate_unique_doc_no
+
+        return validate_unique_doc_no(
+            MaintenanceContract,
+            "contract_no",
+            self.cleaned_data.get("contract_no", ""),
+            instance_pk=self.instance.pk if self.instance else None,
+            generator=generate_contract_no,
+            label="維護合約編號",
+        )
 
     def clean(self):
         cleaned_data = super().clean()
@@ -538,5 +550,17 @@ class CustomerServiceRecordForm(forms.ModelForm):
         self.fields["assigned_to"].queryset = User.objects.filter(is_active=True).order_by("username")
         self.fields["assigned_to"].empty_label = "-- 未指派 (選填) --"
         self.fields["assigned_to"].required = False
+
+    def clean_service_no(self):
+        from apps.core.numbering import generate_service_no, validate_unique_doc_no
+
+        return validate_unique_doc_no(
+            CustomerServiceRecord,
+            "service_no",
+            self.cleaned_data.get("service_no", ""),
+            instance_pk=self.instance.pk if self.instance else None,
+            generator=generate_service_no,
+            label="專業服務單號",
+        )
 
 

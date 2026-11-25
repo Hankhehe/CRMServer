@@ -110,7 +110,7 @@ class CustomerLicense(models.Model):
         max_length=50,
         unique=True,
         verbose_name="授權書編號/合約號",
-        help_text="全系統唯一，例如: LIC-2026-0001",
+        help_text="全系統唯一，例如: L-20261125-0001",
     )
     license_type = models.CharField(
         max_length=20,

@@ -533,7 +533,7 @@ class OrderWorkflowTestCase(TestCase):
         self.assertIn(existing_lic, w_item.warranty_existing_licenses.all())
         self.assertIn(existing_dev, w_item.warranty_existing_devices.all())
 
-        # 送審並由主管核准 -> 依審核當日起算 180 天並自動開立 MA- 維護合約
+        # 送審並由主管核准 -> 依審核當日起算 180 天並自動開立 W- 維護合約
         self.client.post(
             reverse("order-submit", kwargs={"pk": order.pk}),
             data={"no_signed_quote_reason": "續約已確認"},
@@ -545,7 +545,7 @@ class OrderWorkflowTestCase(TestCase):
         expected_end = today_tw + datetime.timedelta(days=180)
         w_item.refresh_from_db()
         ct = MaintenanceContract.objects.get(source_order=order)
-        self.assertTrue(ct.contract_no.startswith("MA-"))
+        self.assertTrue(ct.contract_no.startswith("W-"))
         self.assertEqual(ct.start_date, today_tw)
         self.assertEqual(ct.end_date, expected_end)
         self.assertEqual(w_item.start_date, today_tw)

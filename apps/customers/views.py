@@ -1877,7 +1877,9 @@ def contract_create(request, customer_pk=None):
                 return redirect("customer-detail", pk=customer.pk)
             return redirect("contract-update", pk=contract.pk)
     else:
-        initial = {}
+        from apps.core.numbering import generate_contract_no
+
+        initial = {"contract_no": generate_contract_no()}
         if customer:
             initial["customer"] = customer
         form = MaintenanceContractForm(initial=initial, customer=customer)

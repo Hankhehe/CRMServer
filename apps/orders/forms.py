@@ -92,6 +92,18 @@ class OrderForm(forms.ModelForm):
         self.fields["contact_person"].empty_label = "-- 自行輸入或從客戶聯絡人選取 --"
         self.fields["contact_person"].required = False
 
+    def clean_order_no(self):
+        from apps.core.numbering import generate_order_no, validate_unique_doc_no
+
+        return validate_unique_doc_no(
+            Order,
+            "order_no",
+            self.cleaned_data.get("order_no", ""),
+            instance_pk=self.instance.pk if self.instance else None,
+            generator=generate_order_no,
+            label="訂單編號",
+        )
+
 
 class OrderAttachmentForm(forms.ModelForm):
     class Meta:

@@ -23,27 +23,15 @@ TAIPEI_TZ = ZoneInfo("Asia/Taipei")
 
 
 def _generate_license_no() -> str:
-    today_str = timezone.now().astimezone(TAIPEI_TZ).strftime("%Y%m%d")
-    prefix = f"LIC-{today_str}-"
-    existing = CustomerLicense.objects.filter(license_no__startswith=prefix).values_list("license_no", flat=True)
-    max_seq = 0
-    for code in existing:
-        tail = code[len(prefix):]
-        if tail.isdigit():
-            max_seq = max(max_seq, int(tail))
-    return f"{prefix}{max_seq + 1:04d}"
+    from apps.core.numbering import generate_license_no
+
+    return generate_license_no()
 
 
 def _generate_contract_no() -> str:
-    today_str = timezone.now().astimezone(TAIPEI_TZ).strftime("%Y%m%d")
-    prefix = f"MA-{today_str}-"
-    existing = MaintenanceContract.objects.filter(contract_no__startswith=prefix).values_list("contract_no", flat=True)
-    max_seq = 0
-    for code in existing:
-        tail = code[len(prefix):]
-        if tail.isdigit():
-            max_seq = max(max_seq, int(tail))
-    return f"{prefix}{max_seq + 1:04d}"
+    from apps.core.numbering import generate_contract_no
+
+    return generate_contract_no()
 
 
 def get_warranty_target_labels(
