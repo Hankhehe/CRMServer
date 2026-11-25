@@ -1,3 +1,4 @@
+import datetime
 from decimal import Decimal
 from typing import Optional
 from zoneinfo import ZoneInfo
@@ -39,10 +40,53 @@ def _generate_contract_no() -> str:
     return f"{prefix}{max_seq + 1:04d}"
 
 
+def get_warranty_target_labels(
+    item: OrderItem,
+    order_items_by_sort: Optional[dict[int, OrderItem]] = None,
+) -> list[str]:
+    """回傳維護保固明細所涵蓋的本單新購與客戶已購標的可讀清單"""
+    labels: list[str] = []
+    if item.item_type != OrderItem.TYPE_WARRANTY:
+        return labels
+
+    if order_items_by_sort is None and item.order_id:
+        order_items_by_sort = {
+            it.sort_order: it
+            for it in OrderItem.objects.filter(order_id=item.order_id).only("sort_order", "item_type", "name")
+        }
+    order_items_by_sort = order_items_by_sort or {}
+
+    for raw_idx in (item.warranty_target_item_indexes or []):
+        try:
+            idx = int(raw_idx)
+        except (TypeError, ValueError):
+            continue
+        target_it = order_items_by_sort.get(idx)
+        if target_it:
+            type_tag = "軟體" if target_it.item_type == OrderItem.TYPE_LICENSE else "硬體"
+            labels.append(f"本單新購{type_tag}：{target_it.name}")
+
+    for lic in item.warranty_existing_licenses.all():
+        prod_name = lic.product.name if lic.product_id and lic.product else ""
+        labels.append(f"已購軟體：[{lic.license_no}] {prod_name}".strip())
+
+    for dev in item.warranty_existing_devices.all():
+        model_name = dev.model.name if dev.model_id and dev.model else ""
+        labels.append(f"已購硬體：[{dev.code}] {model_name}".strip())
+
+    return labels
+
+
 def build_order_snapshot_dict(order: Order) -> dict:
     """將訂單當下的表頭、金額與所有明細列序列化為完整 JSON 快照字典"""
+    all_items = list(
+        order.items.select_related("product", "hardware_model")
+        .prefetch_related("warranty_existing_licenses__product", "warranty_existing_devices__model")
+        .all()
+    )
+    items_by_sort = {it.sort_order: it for it in all_items}
     items_payload = []
-    for idx, item in enumerate(order.items.select_related("product", "hardware_model").all(), start=1):
+    for idx, item in enumerate(all_items, start=1):
         items_payload.append({
             "seq": idx,
             "item_type": item.item_type,
@@ -57,6 +101,10 @@ def build_order_snapshot_dict(order: Order) -> dict:
             "hardware_model_name": item.hardware_model.name if item.hardware_model else "",
             "start_date": item.start_date.strftime("%Y-%m-%d") if item.start_date else "",
             "end_date": item.end_date.strftime("%Y-%m-%d") if item.end_date else "",
+            "warranty_days": item.warranty_days,
+            "warranty_targets_display": get_warranty_target_labels(item, items_by_sort)
+            if item.item_type == OrderItem.TYPE_WARRANTY
+            else [],
             "sla_level": item.sla_level,
             "quantity": int(item.quantity or 0),
             "unit": item.unit,
@@ -250,9 +298,14 @@ def approve_order(
     created_contracts: list[MaintenanceContract] = []
 
     with transaction.atomic():
-        items = list(order.items.select_related("product", "hardware_model").all())
+        items = list(
+            order.items.select_related("product", "hardware_model")
+            .prefetch_related("warranty_existing_licenses", "warranty_existing_devices")
+            .all()
+        )
 
         # 1. 開立軟體授權書
+        sort_to_license: dict[int, CustomerLicense] = {}
         for item in items:
             if item.item_type == OrderItem.TYPE_LICENSE and not item.generated_license_id:
                 if not item.product:
@@ -280,17 +333,27 @@ def approve_order(
                 item.generated_license = lic
                 item.save(update_fields=["generated_license"])
                 created_licenses.append(lic)
+                sort_to_license[item.sort_order] = lic
+            elif item.item_type == OrderItem.TYPE_LICENSE and item.generated_license_id:
+                sort_to_license[item.sort_order] = item.generated_license
 
-        # 2. 開立維護保固合約
+        # 2. 開立維護保固合約（依審核通過當日 + 保固天數起算到期日，並綁定所選本單新購與客戶已購標的）
         for item in items:
             if item.item_type == OrderItem.TYPE_WARRANTY and not item.generated_contract_id:
                 contract_no = _generate_contract_no()
+                if item.warranty_days and int(item.warranty_days) > 0:
+                    ct_start_date = today_tw
+                    ct_end_date = today_tw + datetime.timedelta(days=int(item.warranty_days))
+                else:
+                    ct_start_date = item.start_date or today_tw
+                    ct_end_date = item.end_date
+
                 ct = MaintenanceContract.objects.create(
                     customer=order.customer,
                     contract_no=contract_no,
                     name=item.name or f"{order.title} 維護保固合約",
-                    start_date=item.start_date or today_tw,
-                    end_date=item.end_date,
+                    start_date=ct_start_date,
+                    end_date=ct_end_date,
                     amount=item.line_total,
                     sla_level=item.sla_level or "",
                     note=f"由訂單 {order.order_no} (v{order.current_version}) 核准自動開立。{item.description}".strip(),
@@ -300,10 +363,31 @@ def approve_order(
                     reviewed_at=now_ts,
                     source_order=order,
                 )
-                if created_licenses:
-                    ct.licenses.add(*created_licenses)
+                target_indexes = [
+                    int(x) for x in (item.warranty_target_item_indexes or []) if str(x).isdigit()
+                ]
+                existing_lics = list(item.warranty_existing_licenses.all())
+                existing_devs = list(item.warranty_existing_devices.all())
+                has_explicit_targets = bool(target_indexes or existing_lics or existing_devs)
+
+                linked_lics: list[CustomerLicense] = list(existing_lics)
+                if target_indexes:
+                    for idx in target_indexes:
+                        matched_lic = sort_to_license.get(idx)
+                        if matched_lic and matched_lic not in linked_lics:
+                            linked_lics.append(matched_lic)
+                elif not has_explicit_targets and created_licenses:
+                    linked_lics.extend(created_licenses)
+
+                if linked_lics:
+                    ct.licenses.add(*linked_lics)
+                if existing_devs:
+                    ct.probes.add(*existing_devs)
+
                 item.generated_contract = ct
-                item.save(update_fields=["generated_contract"])
+                item.start_date = ct_start_date
+                item.end_date = ct_end_date
+                item.save(update_fields=["generated_contract", "start_date", "end_date"])
                 created_contracts.append(ct)
 
         order.status = Order.STATUS_PENDING_SHIPMENT
@@ -487,6 +571,7 @@ def confirm_order_shipment(
         # 執行正式出貨與交易寫入
         shipped_codes: list[str] = []
         all_shipped_devices: list[HardwareDevice] = []
+        hw_sort_to_devices: dict[int, list[HardwareDevice]] = {}
         for item in hw_items:
             devices = item_devices_map.get(item.pk, [])
             for dev in devices:
@@ -510,12 +595,35 @@ def confirm_order_shipment(
                 shipped_codes.append(dev.code)
                 all_shipped_devices.append(dev)
             item.allocated_devices.set(devices)
+            hw_sort_to_devices[item.sort_order] = devices
 
-        # 若有維護合約則自動掛載出貨硬體設備
+        # 若有維護合約則依保固明細指定的本單硬體項目掛載出貨設備（舊資料無明確標的時相容掛載全部）
         if all_shipped_devices:
-            order_contracts = MaintenanceContract.objects.filter(source_order=order)
-            for ct in order_contracts:
-                ct.probes.add(*all_shipped_devices)
+            warranty_items = list(
+                order.items.filter(item_type=OrderItem.TYPE_WARRANTY)
+                .select_related("generated_contract")
+                .prefetch_related("warranty_existing_licenses", "warranty_existing_devices")
+            )
+            for w_item in warranty_items:
+                ct = w_item.generated_contract
+                if not ct:
+                    continue
+                target_indexes = [
+                    int(x) for x in (w_item.warranty_target_item_indexes or []) if str(x).isdigit()
+                ]
+                has_explicit_targets = bool(
+                    target_indexes
+                    or w_item.warranty_existing_licenses.exists()
+                    or w_item.warranty_existing_devices.exists()
+                )
+                if target_indexes:
+                    matched_devs: list[HardwareDevice] = []
+                    for idx in target_indexes:
+                        matched_devs.extend(hw_sort_to_devices.get(idx, []))
+                    if matched_devs:
+                        ct.probes.add(*matched_devs)
+                elif not has_explicit_targets:
+                    ct.probes.add(*all_shipped_devices)
 
         # 更新工程師順手填入之授權金鑰
         if license_keys:

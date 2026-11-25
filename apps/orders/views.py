@@ -41,6 +41,7 @@ from .services import (
     confirm_order_payment,
     confirm_order_shipment,
     create_order_version_snapshot,
+    get_warranty_target_labels,
     reject_order,
     reject_order_payment,
     report_order_payment,
@@ -102,12 +103,42 @@ def _number_to_zh_currency(amount: int) -> str:
     return f"{result}元整"
 
 
-def _parse_order_items_from_post(request) -> tuple[list[dict], list[str]]:
+def _build_warranty_item_name(target_labels: list[str], warranty_days: int | None) -> str:
+    """依據維護保固涵蓋標的與保固天數自動組合品項名稱"""
+    days_suffix = f" ({warranty_days}天)" if warranty_days and warranty_days > 0 else ""
+    if not target_labels:
+        return f"維護保固服務合約{days_suffix}"[:150]
+    if len(target_labels) == 1:
+        summary = target_labels[0]
+    elif len(target_labels) == 2:
+        summary = f"{target_labels[0]}、{target_labels[1]}"
+    else:
+        summary = f"{target_labels[0]}、{target_labels[1]} 等 {len(target_labels)} 項"
+    return f"維護保固 - {summary}{days_suffix}"[:150]
+
+
+def _parse_csv_tokens(raw_val: str) -> list[str]:
+    if not raw_val:
+        return []
+    tokens = []
+    for part in str(raw_val).split(","):
+        tok = part.strip()
+        if tok and tok not in tokens:
+            tokens.append(tok)
+    return tokens
+
+
+def _parse_order_items_from_post(request, customer_id=None) -> tuple[list[dict], list[str]]:
     """
     從動態明細表單 POST 陣列解析訂單明細列並驗證格式。
+    規則：
+    - 僅「專業服務 / 其他 (service)」可自由編輯品項名稱與單位；其餘三類由系統依主檔/標的強制帶入。
+    - 維護保固 (warranty) 必選至少一個標的（本單新購軟硬體明細或該客戶已購軟體授權/已出貨硬體），
+      並填寫正整數保固天數 (warranty_days)，到期日於主管審核通過當日起算。
     回傳 (parsed_items, errors)
     """
     item_types = request.POST.getlist("item_type")
+    row_uids = request.POST.getlist("item_row_uid")
     names = request.POST.getlist("item_name")
     descriptions = request.POST.getlist("item_description")
     product_ids = request.POST.getlist("item_product")
@@ -115,6 +146,10 @@ def _parse_order_items_from_post(request) -> tuple[list[dict], list[str]]:
     hw_model_ids = request.POST.getlist("item_hardware_model")
     start_dates = request.POST.getlist("item_start_date")
     end_dates = request.POST.getlist("item_end_date")
+    warranty_days_list = request.POST.getlist("item_warranty_days")
+    warranty_order_targets_list = request.POST.getlist("item_warranty_order_targets")
+    warranty_existing_lic_list = request.POST.getlist("item_warranty_existing_licenses")
+    warranty_existing_dev_list = request.POST.getlist("item_warranty_existing_devices")
     sla_levels = request.POST.getlist("item_sla_level")
     quantities = request.POST.getlist("item_quantity")
     units = request.POST.getlist("item_unit")
@@ -133,13 +168,37 @@ def _parse_order_items_from_post(request) -> tuple[list[dict], list[str]]:
 
     parsed = []
     errors = []
-    row_count = max(len(item_types), len(names), 0)
+    row_count = max(len(item_types), len(names), len(product_ids), len(hw_model_ids), 0)
 
     products_map = {str(p.pk): p for p in Product.objects.all()}
     models_map = {str(m.pk): m for m in HardwareModel.objects.all()}
 
+    valid_customer_id = int(customer_id) if str(customer_id or "").isdigit() else None
+    cust_licenses_map: dict[str, CustomerLicense] = {}
+    cust_devices_map: dict[str, HardwareDevice] = {}
+    if valid_customer_id:
+        cust_licenses_map = {
+            str(lic.pk): lic
+            for lic in CustomerLicense.objects.filter(
+                customer_id=valid_customer_id,
+                approval_status=CustomerLicense.APPROVAL_APPROVED,
+                is_disabled=False,
+            ).select_related("product")
+        }
+        cust_devices_map = {
+            str(dev.pk): dev
+            for dev in HardwareDevice.objects.filter(
+                customer_id=valid_customer_id,
+                status=HardwareDevice.STATUS_SHIPPED,
+                is_deleted=False,
+            ).select_related("model")
+        }
+
+    # Pass 1: 解析所有列的基本欄位與主檔綁定
+    uid_to_row: dict[str, dict] = {}
     for i in range(row_count):
         i_type = _get(item_types, i, OrderItem.TYPE_LICENSE)
+        r_uid = _get(row_uids, i) or f"row_{i + 1}"
         i_name = _get(names, i)
         i_desc = _get(descriptions, i)
         p_id = _get(product_ids, i)
@@ -147,16 +206,21 @@ def _parse_order_items_from_post(request) -> tuple[list[dict], list[str]]:
         m_id = _get(hw_model_ids, i)
         s_raw = _get(start_dates, i)
         e_raw = _get(end_dates, i)
+        w_days_raw = _get(warranty_days_list, i)
+        w_order_targets_raw = _get(warranty_order_targets_list, i)
+        w_exist_lics_raw = _get(warranty_existing_lic_list, i)
+        w_exist_devs_raw = _get(warranty_existing_dev_list, i)
         sla = _get(sla_levels, i)
         qty_raw = _get(quantities, i, "1")
         unit = _get(units, i, "式")
         price_raw = _get(unit_prices, i, "0")
 
-        # 若整列為空白（無名稱、無選產品、無選型號），跳過
-        if not i_name and not p_id and not m_id:
+        # 若非維護保固且整列為空白（無名稱、無選產品、無選型號），跳過
+        if i_type != OrderItem.TYPE_WARRANTY and not i_name and not p_id and not m_id:
             continue
 
-        row_label = f"第 {len(parsed) + 1} 列明細"
+        sort_idx = len(parsed) + 1
+        row_label = f"第 {sort_idx} 列明細"
 
         product_obj = products_map.get(p_id) if p_id else None
         hw_model_obj = models_map.get(m_id) if m_id else None
@@ -164,46 +228,45 @@ def _parse_order_items_from_post(request) -> tuple[list[dict], list[str]]:
         if i_type == OrderItem.TYPE_LICENSE:
             if not product_obj:
                 errors.append(f"{row_label}為「軟體授權」，請選擇對應的軟體產品主檔。")
-            if not i_name and product_obj:
-                i_name = product_obj.name
-            if not unit and product_obj:
-                unit = product_obj.default_unit or "台"
+            # 強制鎖定名稱與單位為軟體產品主檔值
+            i_name = product_obj.name if product_obj else i_name
+            unit = (product_obj.default_unit or "台") if product_obj else (unit or "台")
         elif i_type == OrderItem.TYPE_HARDWARE:
             if not hw_model_obj:
                 errors.append(f"{row_label}為「硬體設備」，請選擇對應的硬體型號規格主檔。")
-            if not i_name and hw_model_obj:
-                i_name = hw_model_obj.name
-            if not unit:
-                unit = "台"
+            # 強制鎖定名稱與單位為硬體型號主檔值
+            i_name = hw_model_obj.name if hw_model_obj else i_name
+            unit = "台"
         elif i_type == OrderItem.TYPE_WARRANTY:
-            if not i_name:
-                i_name = "維護保固服務合約"
-            if not unit:
-                unit = "年"
+            unit = "式"
+            s_raw = ""
+            e_raw = ""
         else:
             i_type = OrderItem.TYPE_SERVICE
             if not i_name:
                 errors.append(f"{row_label}請填寫品項名稱。")
+            if not unit:
+                unit = "式"
 
-        if not i_name:
+        if not i_name and i_type != OrderItem.TYPE_WARRANTY:
             i_name = "未命名品項"
 
         try:
             qty_val = int(qty_raw or 1)
             if qty_val <= 0:
-                errors.append(f"{row_label}「{i_name}」的數量必須大於 0。")
+                errors.append(f"{row_label}「{i_name or '維護保固'}」的數量必須大於 0。")
                 qty_val = 1
         except ValueError:
-            errors.append(f"{row_label}「{i_name}」的數量格式不正確。")
+            errors.append(f"{row_label}「{i_name or '維護保固'}」的數量格式不正確。")
             qty_val = 1
 
         try:
             price_val = Decimal(price_raw.replace(",", "") or "0")
             if price_val < Decimal("0"):
-                errors.append(f"{row_label}「{i_name}」的單價不可小於 0。")
+                errors.append(f"{row_label}「{i_name or '維護保固'}」的單價不可小於 0。")
                 price_val = Decimal("0")
         except Exception:
-            errors.append(f"{row_label}「{i_name}」的單價格式不正確。")
+            errors.append(f"{row_label}「{i_name or '維護保固'}」的單價格式不正確。")
             price_val = Decimal("0")
 
         s_date = _parse_date(s_raw)
@@ -215,8 +278,20 @@ def _parse_order_items_from_post(request) -> tuple[list[dict], list[str]]:
         elif s_date and e_date and e_date < s_date:
             errors.append(f"{row_label}「{i_name}」的到期日期不可早於起始日期。")
 
-        parsed.append({
-            "sort_order": len(parsed) + 1,
+        warranty_days_val = None
+        if i_type == OrderItem.TYPE_WARRANTY:
+            try:
+                warranty_days_val = int(w_days_raw)
+                if warranty_days_val <= 0:
+                    errors.append(f"{row_label}為「維護保固」，保固天數必須為大於 0 的整數。")
+                    warranty_days_val = None
+            except (TypeError, ValueError):
+                errors.append(f"{row_label}為「維護保固」，請填寫正確的保固天數（例如 365）。")
+                warranty_days_val = None
+
+        row_dict = {
+            "sort_order": sort_idx,
+            "row_uid": r_uid,
             "item_type": i_type,
             "name": i_name[:150],
             "description": i_desc[:300],
@@ -225,11 +300,64 @@ def _parse_order_items_from_post(request) -> tuple[list[dict], list[str]]:
             "hardware_model": hw_model_obj if i_type == OrderItem.TYPE_HARDWARE else None,
             "start_date": s_date,
             "end_date": e_date,
+            "warranty_days": warranty_days_val,
+            "warranty_target_item_indexes": [],
+            "warranty_existing_licenses": [],
+            "warranty_existing_devices": [],
+            "_raw_order_target_uids": _parse_csv_tokens(w_order_targets_raw) if i_type == OrderItem.TYPE_WARRANTY else [],
+            "_raw_existing_lic_ids": _parse_csv_tokens(w_exist_lics_raw) if i_type == OrderItem.TYPE_WARRANTY else [],
+            "_raw_existing_dev_ids": _parse_csv_tokens(w_exist_devs_raw) if i_type == OrderItem.TYPE_WARRANTY else [],
             "sla_level": sla[:50] if i_type == OrderItem.TYPE_WARRANTY else "",
             "quantity": qty_val,
             "unit": (unit or "式")[:20],
             "unit_price": price_val,
-        })
+        }
+        parsed.append(row_dict)
+        uid_to_row[r_uid] = row_dict
+        uid_to_row[str(sort_idx)] = row_dict
+
+    # Pass 2: 解析維護保固明細的涵蓋標的（本單新購軟硬體 + 客戶已購授權/設備）並自動組合名稱
+    for row in parsed:
+        if row["item_type"] != OrderItem.TYPE_WARRANTY:
+            continue
+        row_label = f"第 {row['sort_order']} 列明細"
+
+        resolved_indexes: list[int] = []
+        target_labels: list[str] = []
+        for tok in row["_raw_order_target_uids"]:
+            target_row = uid_to_row.get(tok)
+            if (
+                target_row
+                and target_row is not row
+                and target_row["item_type"] in (OrderItem.TYPE_LICENSE, OrderItem.TYPE_HARDWARE)
+            ):
+                if target_row["sort_order"] not in resolved_indexes:
+                    resolved_indexes.append(target_row["sort_order"])
+                    target_labels.append(target_row["name"])
+
+        resolved_lics: list[CustomerLicense] = []
+        for lid in row["_raw_existing_lic_ids"]:
+            lic_obj = cust_licenses_map.get(lid)
+            if lic_obj:
+                resolved_lics.append(lic_obj)
+                target_labels.append(f"{lic_obj.product.name} ({lic_obj.license_no})")
+
+        resolved_devs: list[HardwareDevice] = []
+        for did in row["_raw_existing_dev_ids"]:
+            dev_obj = cust_devices_map.get(did)
+            if dev_obj:
+                resolved_devs.append(dev_obj)
+                model_str = dev_obj.model.name if dev_obj.model_id and dev_obj.model else "硬體設備"
+                target_labels.append(f"{model_str} ({dev_obj.code})")
+
+        if not resolved_indexes and not resolved_lics and not resolved_devs:
+            errors.append(f"{row_label}為「維護保固」，請至少勾選一項本單新購軟硬體或該客戶已購的產品／硬體。")
+
+        row["warranty_target_item_indexes"] = resolved_indexes
+        row["warranty_existing_licenses"] = resolved_lics
+        row["warranty_existing_devices"] = resolved_devs
+        row["name"] = _build_warranty_item_name(target_labels, row["warranty_days"])
+        row["unit"] = "式"
 
     if not parsed and not errors:
         errors.append("訂單至少需填寫一筆有效的品項明細。")
@@ -440,9 +568,9 @@ def order_export(request):
 
 
 def _prepare_form_catalog_json(customer_qs) -> dict:
-    """為 order_form.html 準備客戶聯絡人、軟體產品主檔與硬體型號規格 JSON"""
+    """為 order_form.html 準備客戶聯絡人、已購軟體/硬體、軟體產品主檔與硬體型號規格 JSON"""
     customers_data = {}
-    for c in customer_qs.prefetch_related("contacts"):
+    for c in customer_qs.prefetch_related("contacts", "licenses__product", "probes__model"):
         contacts_list = [
             {
                 "id": cp.pk,
@@ -454,11 +582,37 @@ def _prepare_form_catalog_json(customer_qs) -> dict:
             }
             for cp in c.contacts.all()
         ]
+        existing_licenses = [
+            {
+                "id": lic.pk,
+                "license_no": lic.license_no,
+                "product_name": lic.product.name if lic.product_id else "",
+                "quantity": lic.quantity,
+                "unit": lic.unit,
+                "label": f"[{lic.license_no}] {lic.product.name if lic.product_id else ''} ({lic.quantity}{lic.unit})",
+                "short_name": f"{lic.product.name if lic.product_id else ''} ({lic.license_no})",
+            }
+            for lic in c.licenses.all()
+            if lic.approval_status == CustomerLicense.APPROVAL_APPROVED and not lic.is_disabled
+        ]
+        existing_devices = [
+            {
+                "id": dev.pk,
+                "code": dev.code,
+                "model_name": dev.model.name if dev.model_id else "未知型號",
+                "label": f"[{dev.code}] {dev.model.name if dev.model_id else '未知型號'}",
+                "short_name": f"{dev.model.name if dev.model_id else '硬體設備'} ({dev.code})",
+            }
+            for dev in c.probes.all()
+            if dev.status == HardwareDevice.STATUS_SHIPPED and not dev.is_deleted
+        ]
         customers_data[str(c.pk)] = {
             "contact": c.contact,
             "phone": c.phone,
             "email": c.email,
             "contacts": contacts_list,
+            "existing_licenses": existing_licenses,
+            "existing_devices": existing_devices,
         }
 
     products = list(Product.objects.filter(is_active=True).order_by("code"))
@@ -486,6 +640,69 @@ def _prepare_form_catalog_json(customer_qs) -> dict:
     }
 
 
+def _create_order_item_from_parsed(order: Order, row: dict) -> OrderItem:
+    """從 _parse_order_items_from_post 的解析結果建立 OrderItem 並設定 M2M 維護保固標的"""
+    existing_lics = row.get("warranty_existing_licenses") or []
+    existing_devs = row.get("warranty_existing_devices") or []
+    item = OrderItem.objects.create(
+        order=order,
+        sort_order=row["sort_order"],
+        item_type=row["item_type"],
+        name=row["name"],
+        description=row["description"],
+        product=row["product"],
+        license_type=row["license_type"],
+        hardware_model=row["hardware_model"],
+        start_date=row["start_date"],
+        end_date=row["end_date"],
+        warranty_days=row["warranty_days"],
+        warranty_target_item_indexes=row["warranty_target_item_indexes"],
+        sla_level=row["sla_level"],
+        quantity=row["quantity"],
+        unit=row["unit"],
+        unit_price=row["unit_price"],
+    )
+    if existing_lics:
+        item.warranty_existing_licenses.set(existing_lics)
+    if existing_devs:
+        item.warranty_existing_devices.set(existing_devs)
+    return item
+
+
+def _serialize_parsed_items_for_form(parsed_items: list[dict]) -> list[dict]:
+    """將 POST 失敗回顯的解析明細轉為 order_form.html INITIAL_ITEMS 格式"""
+    sort_to_uid = {row["sort_order"]: row["row_uid"] for row in parsed_items}
+    result = []
+    for row in parsed_items:
+        target_uids = [
+            sort_to_uid[idx]
+            for idx in (row.get("warranty_target_item_indexes") or [])
+            if idx in sort_to_uid
+        ]
+        if not target_uids and row.get("_raw_order_target_uids"):
+            target_uids = list(row["_raw_order_target_uids"])
+        result.append({
+            "row_uid": row["row_uid"],
+            "item_type": row["item_type"],
+            "name": row["name"],
+            "description": row["description"],
+            "product_id": row["product"].pk if row["product"] else "",
+            "license_type": row["license_type"] or "perpetual",
+            "hardware_model_id": row["hardware_model"].pk if row["hardware_model"] else "",
+            "start_date": row["start_date"].strftime("%Y-%m-%d") if row["start_date"] else "",
+            "end_date": row["end_date"].strftime("%Y-%m-%d") if row["end_date"] else "",
+            "warranty_days": row["warranty_days"] or 365,
+            "warranty_order_targets": target_uids,
+            "warranty_existing_license_ids": [lic.pk for lic in (row.get("warranty_existing_licenses") or [])],
+            "warranty_existing_device_ids": [dev.pk for dev in (row.get("warranty_existing_devices") or [])],
+            "sla_level": row["sla_level"],
+            "quantity": row["quantity"],
+            "unit": row["unit"],
+            "unit_price": int(row["unit_price"]),
+        })
+    return result
+
+
 @login_required
 def order_create(request):
     if not user_can_edit_orders(request.user):
@@ -494,10 +711,11 @@ def order_create(request):
 
     sys_settings = SystemSetting.get_settings()
     customer_param = request.GET.get("customer", "").strip()
+    today_tw = timezone.now().astimezone(TAIPEI_TZ).date()
     initial_data = {
         "salesperson": request.user.pk,
-        "quote_date": timezone.now().astimezone(TAIPEI_TZ).date(),
-        "valid_until": timezone.now().astimezone(TAIPEI_TZ).date() + datetime.timedelta(days=30),
+        "quote_date": today_tw,
+        "valid_until": today_tw + datetime.timedelta(days=7),
         "terms_note": sys_settings.quotation_default_terms,
     }
     if customer_param.isdigit():
@@ -513,7 +731,9 @@ def order_create(request):
 
     if request.method == "POST":
         form = OrderForm(request.POST, user=request.user)
-        parsed_items, item_errors = _parse_order_items_from_post(request)
+        parsed_items, item_errors = _parse_order_items_from_post(
+            request, customer_id=request.POST.get("customer")
+        )
         if form.is_valid() and not item_errors:
             with transaction.atomic():
                 order = form.save(commit=False)
@@ -525,7 +745,7 @@ def order_create(request):
                 order.save()
 
                 for row in parsed_items:
-                    OrderItem.objects.create(order=order, **row)
+                    _create_order_item_from_parsed(order, row)
 
                 order.recalculate_totals(save=True)
                 create_order_version_snapshot(
@@ -547,22 +767,7 @@ def order_create(request):
             messages.success(request, f"已建立訂單「{order.order_no}」（v1），可列印報價單或上傳回簽單後送交主管審核。")
             return redirect("order-detail", pk=order.pk)
         else:
-            # 保留已填的明細列供頁面回顯
-            for row in parsed_items:
-                submitted_items.append({
-                    "item_type": row["item_type"],
-                    "name": row["name"],
-                    "description": row["description"],
-                    "product_id": row["product"].pk if row["product"] else "",
-                    "license_type": row["license_type"] or "perpetual",
-                    "hardware_model_id": row["hardware_model"].pk if row["hardware_model"] else "",
-                    "start_date": row["start_date"].strftime("%Y-%m-%d") if row["start_date"] else "",
-                    "end_date": row["end_date"].strftime("%Y-%m-%d") if row["end_date"] else "",
-                    "sla_level": row["sla_level"],
-                    "quantity": row["quantity"],
-                    "unit": row["unit"],
-                    "unit_price": int(row["unit_price"]),
-                })
+            submitted_items = _serialize_parsed_items_for_form(parsed_items)
     else:
         form = OrderForm(initial=initial_data, user=request.user)
 
@@ -597,7 +802,9 @@ def order_update(request, pk):
 
     if request.method == "POST":
         form = OrderForm(request.POST, instance=order, user=request.user)
-        parsed_items, item_errors = _parse_order_items_from_post(request)
+        parsed_items, item_errors = _parse_order_items_from_post(
+            request, customer_id=request.POST.get("customer") or order.customer_id
+        )
         save_mode = request.POST.get("save_mode", "save_draft")
         version_note = request.POST.get("version_note", "").strip()
 
@@ -619,7 +826,7 @@ def order_update(request, pk):
 
                 updated_order.items.all().delete()
                 for row in parsed_items:
-                    OrderItem.objects.create(order=updated_order, **row)
+                    _create_order_item_from_parsed(updated_order, row)
 
                 updated_order.recalculate_totals(save=True)
 
@@ -665,25 +872,21 @@ def order_update(request, pk):
 
             return redirect("order-detail", pk=order.pk)
         else:
-            for row in parsed_items:
-                submitted_items.append({
-                    "item_type": row["item_type"],
-                    "name": row["name"],
-                    "description": row["description"],
-                    "product_id": row["product"].pk if row["product"] else "",
-                    "license_type": row["license_type"] or "perpetual",
-                    "hardware_model_id": row["hardware_model"].pk if row["hardware_model"] else "",
-                    "start_date": row["start_date"].strftime("%Y-%m-%d") if row["start_date"] else "",
-                    "end_date": row["end_date"].strftime("%Y-%m-%d") if row["end_date"] else "",
-                    "sla_level": row["sla_level"],
-                    "quantity": row["quantity"],
-                    "unit": row["unit"],
-                    "unit_price": int(row["unit_price"]),
-                })
+            submitted_items = _serialize_parsed_items_for_form(parsed_items)
     else:
         form = OrderForm(instance=order, user=request.user)
-        for item in order.items.all():
+        existing_items = list(
+            order.items.prefetch_related("warranty_existing_licenses", "warranty_existing_devices").all()
+        )
+        sort_to_uid = {item.sort_order: f"row_{item.sort_order}" for item in existing_items}
+        for item in existing_items:
+            target_uids = [
+                sort_to_uid[int(idx)]
+                for idx in (item.warranty_target_item_indexes or [])
+                if str(idx).isdigit() and int(idx) in sort_to_uid
+            ]
             submitted_items.append({
+                "row_uid": sort_to_uid[item.sort_order],
                 "item_type": item.item_type,
                 "name": item.name,
                 "description": item.description,
@@ -692,6 +895,10 @@ def order_update(request, pk):
                 "hardware_model_id": item.hardware_model_id or "",
                 "start_date": item.start_date.strftime("%Y-%m-%d") if item.start_date else "",
                 "end_date": item.end_date.strftime("%Y-%m-%d") if item.end_date else "",
+                "warranty_days": item.warranty_days or 365,
+                "warranty_order_targets": target_uids,
+                "warranty_existing_license_ids": list(item.warranty_existing_licenses.values_list("id", flat=True)),
+                "warranty_existing_device_ids": list(item.warranty_existing_devices.values_list("id", flat=True)),
                 "sla_level": item.sla_level or "",
                 "quantity": item.quantity,
                 "unit": item.unit,
@@ -756,6 +963,8 @@ def order_detail(request, pk):
             "items__generated_license__product",
             "items__generated_contract",
             "items__allocated_devices__model",
+            "items__warranty_existing_licenses__product",
+            "items__warranty_existing_devices__model",
             "versions__created_by",
             "attachments__uploaded_by",
             "payments__reported_by",
@@ -768,6 +977,13 @@ def order_detail(request, pk):
         return redirect("order-list")
 
     items = list(order.items.all())
+    items_by_sort = {it.sort_order: it for it in items}
+    for it in items:
+        it.warranty_target_labels = (
+            get_warranty_target_labels(it, items_by_sort)
+            if it.item_type == OrderItem.TYPE_WARRANTY
+            else []
+        )
     versions = list(order.versions.all())
     attachments = list(order.attachments.all())
     payments = list(order.payments.all())

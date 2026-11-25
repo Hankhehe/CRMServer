@@ -21,7 +21,8 @@ User = get_user_model()
 class VersioningUnitTests(TestCase):
     def test_version_file_reads_expected_semver(self):
         version = versioning.get_app_version()
-        self.assertEqual(version, "1.1.0")
+        major, minor, patch = versioning.parse_semver(version)
+        self.assertEqual(version, f"{major}.{minor}.{patch}")
         self.assertEqual(versioning.parse_semver("v1.2.3"), (1, 2, 3))
         self.assertEqual(versioning.parse_semver(" 2.0.10 "), (2, 0, 10))
         with self.assertRaises(ValueError):
@@ -30,14 +31,15 @@ class VersioningUnitTests(TestCase):
             versioning.parse_semver("invalid")
 
     def test_parse_changelog_returns_releases_and_escapes_html(self):
+        current_ver = versioning.get_app_version()
         releases = versioning.parse_changelog()
         versions = [r["version"] for r in releases]
-        self.assertIn("1.1.0", versions)
+        self.assertIn(current_ver, versions)
         self.assertIn("1.0.0", versions)
 
         latest = releases[0]
-        self.assertEqual(latest["version"], "1.1.0")
-        self.assertEqual(latest["display_version"], "v1.1.0")
+        self.assertEqual(latest["version"], current_ver)
+        self.assertEqual(latest["display_version"], f"v{current_ver}")
         self.assertTrue(latest["date"])
         self.assertTrue(latest["sections"])
 
@@ -75,13 +77,15 @@ class VersioningUITests(TestCase):
         versioning.get_git_metadata.cache_clear()
 
     def test_login_page_displays_version_without_modal_or_git_metadata(self):
+        current_ver = versioning.get_app_version()
         resp = self.client.get(reverse("login"))
         self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, "CRM Server v1.1.0")
+        self.assertContains(resp, f"CRM Server v{current_ver}")
         self.assertNotContains(resp, "version-info-modal-overlay")
         self.assertNotContains(resp, "Commit:")
 
     def test_authenticated_regular_user_sees_sidebar_version_and_modal_without_git(self):
+        current_ver = versioning.get_app_version()
         self.client.force_login(self.regular_user)
         with patch.object(
             versioning,
@@ -90,12 +94,13 @@ class VersioningUITests(TestCase):
         ):
             resp = self.client.get(reverse("account-center"))
         self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, "版本 v1.1.0")
+        self.assertContains(resp, f"版本 v{current_ver}")
         self.assertContains(resp, "version-info-modal-overlay")
         self.assertContains(resp, "系統版本與更新歷程")
         self.assertNotContains(resp, "Commit: <code>abc1234</code>")
 
     def test_authenticated_superuser_sees_git_metadata_when_available_and_hides_when_empty(self):
+        current_ver = versioning.get_app_version()
         self.client.force_login(self.superuser)
         with patch.object(
             versioning,
@@ -104,7 +109,7 @@ class VersioningUITests(TestCase):
         ):
             resp = self.client.get(reverse("account-center"))
         self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, "版本 v1.1.0")
+        self.assertContains(resp, f"版本 v{current_ver}")
         self.assertContains(resp, "Commit: <code>abc1234</code>")
         self.assertContains(resp, "Branch: <code>main</code>")
 
@@ -116,18 +121,21 @@ class VersioningUITests(TestCase):
         ):
             resp_no_git = self.client.get(reverse("account-center"))
         self.assertEqual(resp_no_git.status_code, 200)
-        self.assertContains(resp_no_git, "版本 v1.1.0")
+        self.assertContains(resp_no_git, f"版本 v{current_ver}")
         self.assertContains(resp_no_git, "version-info-modal-overlay")
         self.assertNotContains(resp_no_git, "Commit:")
 
 
 class BumpVersionCommandTests(TestCase):
     def test_bump_version_dry_run_does_not_modify_real_files(self):
+        current_ver = versioning.get_app_version()
+        major, minor, patch_num = versioning.parse_semver(current_ver)
+        expected_next = f"{major}.{minor}.{patch_num + 1}"
         out = StringIO()
         call_command("bump_version", "patch", "--dry-run", stdout=out)
         output = out.getvalue()
-        self.assertIn("1.1.0 -> 1.1.1", output)
-        self.assertEqual(versioning.get_app_version(), "1.1.0")
+        self.assertIn(f"{current_ver} -> {expected_next}", output)
+        self.assertEqual(versioning.get_app_version(), current_ver)
 
     def test_bump_version_minor_updates_temp_version_and_changelog(self):
         today_taipei = datetime.now(ZoneInfo("Asia/Taipei")).strftime("%Y-%m-%d")

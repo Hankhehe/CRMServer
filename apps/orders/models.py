@@ -15,9 +15,9 @@ def _today_tw():
 
 
 def generate_order_no() -> str:
-    """產生唯一預設訂單單號，格式: ORD-YYYYMMDD-XXXX"""
+    """產生唯一預設訂單單號，格式: SO-YYYYMMDD-XXXX"""
     today_str = timezone.now().astimezone(TAIPEI_TZ).strftime("%Y%m%d")
-    prefix = f"ORD-{today_str}-"
+    prefix = f"SO-{today_str}-"
     existing_nos = Order.objects.filter(order_no__startswith=prefix).values_list("order_no", flat=True)
     max_seq = 0
     for code in existing_nos:
@@ -358,6 +358,30 @@ class OrderItem(models.Model):
     )
     start_date = models.DateField(null=True, blank=True, verbose_name="起始日期")
     end_date = models.DateField(null=True, blank=True, verbose_name="到期日期")
+    warranty_days = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="保固天數 (天)",
+        help_text="維護保固專用：訂單審核通過當日起算對應天數為到期日",
+    )
+    warranty_target_item_indexes = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name="涵蓋本單軟硬體明細序號",
+        help_text="儲存同訂單中被此維護保固涵蓋之軟硬體明細 sort_order 清單 (JSON)",
+    )
+    warranty_existing_licenses = models.ManyToManyField(
+        "licenses.CustomerLicense",
+        blank=True,
+        related_name="warranty_order_items",
+        verbose_name="涵蓋客戶已購軟體授權",
+    )
+    warranty_existing_devices = models.ManyToManyField(
+        "hardware.HardwareDevice",
+        blank=True,
+        related_name="warranty_order_items",
+        verbose_name="涵蓋客戶已購硬體設備",
+    )
     sla_level = models.CharField(max_length=50, blank=True, default="", verbose_name="服務等級 (SLA)")
 
     quantity = models.PositiveIntegerField(default=1, verbose_name="數量")

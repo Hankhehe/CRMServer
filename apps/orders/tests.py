@@ -96,36 +96,42 @@ class OrderWorkflowTestCase(TestCase):
 
     def _create_order_via_post(self, include_hardware=True):
         self.client.force_login(self.sales_user)
+        order_targets = "r_1,r_3" if include_hardware else "r_1"
         post_data = {
-            "order_no": "ORD-20261125-0001",
+            "order_no": "SO-20261125-0001",
             "customer": self.customer.pk,
             "contact_name": "張經理",
             "contact_phone": "02-2222-3333",
             "contact_email": "client@example.com",
             "title": "年度資安探針採購案",
             "quote_date": "2026-11-25",
-            "valid_until": "2026-12-25",
+            "valid_until": "2026-12-02",
             "tax_mode": "tax_exclusive",
             "discount_amount": "0",
             "payment_terms": "訂金 30% + 尾款 70%",
             "terms_note": "標準報價條款",
             "salesperson": self.sales_user.pk,
+            "item_row_uid": ["r_1", "r_2"] + (["r_3"] if include_hardware else []),
             "item_type": ["license", "warranty"] + (["hardware"] if include_hardware else []),
-            "item_name": ["流量分析核心軟體", "一年維護保固合約"] + (["NP-1000 探針設備"] if include_hardware else []),
+            "item_name": ["流量分析核心軟體", "維護保固"] + (["NP-1000 探針設備"] if include_hardware else []),
             "item_description": ["永久授權", "5x8 服務"] + (["含機架配件"] if include_hardware else []),
             "item_product": [str(self.product.pk), ""] + ([""] if include_hardware else []),
             "item_license_type": ["perpetual", "perpetual"] + ([""] if include_hardware else []),
             "item_hardware_model": ["", ""] + ([str(self.hw_model.pk)] if include_hardware else []),
-            "item_start_date": ["2026-11-25", "2026-11-25"] + ([""] if include_hardware else []),
-            "item_end_date": ["", "2027-11-24"] + ([""] if include_hardware else []),
+            "item_start_date": ["2026-11-25", ""] + ([""] if include_hardware else []),
+            "item_end_date": ["", ""] + ([""] if include_hardware else []),
+            "item_warranty_days": ["", "365"] + ([""] if include_hardware else []),
+            "item_warranty_order_targets": ["", order_targets] + ([""] if include_hardware else []),
+            "item_warranty_existing_licenses": ["", ""] + ([""] if include_hardware else []),
+            "item_warranty_existing_devices": ["", ""] + ([""] if include_hardware else []),
             "item_sla_level": ["", "5x8"] + ([""] if include_hardware else []),
             "item_quantity": ["1", "1"] + (["2"] if include_hardware else []),
-            "item_unit": ["套", "年"] + (["台"] if include_hardware else []),
+            "item_unit": ["套", "式"] + (["台"] if include_hardware else []),
             "item_unit_price": ["100000", "20000"] + (["50000"] if include_hardware else []),
         }
         resp = self.client.post(reverse("order-create"), data=post_data)
         self.assertEqual(resp.status_code, 302)
-        return Order.objects.get(order_no="ORD-20261125-0001")
+        return Order.objects.get(order_no="SO-20261125-0001")
 
     def test_order_creation_totals_and_version_snapshot_on_price_cut(self):
         order = self._create_order_via_post(include_hardware=True)
@@ -145,23 +151,28 @@ class OrderWorkflowTestCase(TestCase):
             "contact_name": "張經理",
             "title": order.title,
             "quote_date": "2026-11-25",
-            "valid_until": "2026-12-25",
+            "valid_until": "2026-12-02",
             "tax_mode": "tax_exclusive",
             "discount_amount": "0",
             "payment_terms": order.payment_terms,
             "terms_note": "修改後條款",
             "salesperson": self.sales_user.pk,
+            "item_row_uid": ["r_1", "r_2", "r_3"],
             "item_type": ["license", "warranty", "hardware"],
-            "item_name": ["流量分析核心軟體", "一年維護保固合約", "NP-1000 探針設備"],
+            "item_name": ["流量分析核心軟體", "維護保固", "NP-1000 探針設備"],
             "item_description": ["永久授權", "5x8", ""],
             "item_product": [str(self.product.pk), "", ""],
             "item_license_type": ["perpetual", "perpetual", ""],
             "item_hardware_model": ["", "", str(self.hw_model.pk)],
-            "item_start_date": ["2026-11-25", "2026-11-25", ""],
-            "item_end_date": ["", "2027-11-24", ""],
+            "item_start_date": ["2026-11-25", "", ""],
+            "item_end_date": ["", "", ""],
+            "item_warranty_days": ["", "365", ""],
+            "item_warranty_order_targets": ["", "r_1,r_3", ""],
+            "item_warranty_existing_licenses": ["", "", ""],
+            "item_warranty_existing_devices": ["", "", ""],
             "item_sla_level": ["", "5x8", ""],
             "item_quantity": ["1", "1", "2"],
-            "item_unit": ["套", "年", "台"],
+            "item_unit": ["套", "式", "台"],
             "item_unit_price": ["100000", "20000", "50000"],
             "save_mode": "save_draft",
         }
@@ -187,7 +198,7 @@ class OrderWorkflowTestCase(TestCase):
         # 列印頁可調閱 v1 舊版與 v2 新版
         resp_v1 = self.client.get(reverse("order-quotation-version-print", kwargs={"pk": order.pk, "version_no": 1}))
         self.assertEqual(resp_v1.status_code, 200)
-        self.assertContains(resp_v1, "ORD-20261125-0001-v1")
+        self.assertContains(resp_v1, "SO-20261125-0001-v1")
         self.assertContains(resp_v1, "貳拾參萬壹仟元整")
 
     def test_flexible_submission_and_full_end_to_end_workflow(self):
@@ -362,3 +373,237 @@ class OrderWorkflowTestCase(TestCase):
         self.assertNotContains(list_resp, order.order_no)
         detail_resp = other_client.get(reverse("order-detail", kwargs={"pk": order.pk}))
         self.assertEqual(detail_resp.status_code, 302)
+
+    def test_order_create_defaults_so_prefix_and_7_day_validity(self):
+        from zoneinfo import ZoneInfo
+        from django.utils import timezone
+        from apps.orders.models import generate_order_no
+
+        self.client.force_login(self.sales_user)
+        resp = self.client.get(reverse("order-create"))
+        self.assertEqual(resp.status_code, 200)
+
+        today_tw = timezone.now().astimezone(ZoneInfo("Asia/Taipei")).date()
+        form = resp.context["form"]
+        self.assertTrue(generate_order_no().startswith(f"SO-{today_tw.strftime('%Y%m%d')}-"))
+        self.assertEqual(form.initial["quote_date"], today_tw)
+        self.assertEqual(form.initial["valid_until"], today_tw + datetime.timedelta(days=7))
+
+    def test_name_and_unit_locked_except_service(self):
+        self.client.force_login(self.sales_user)
+        post_data = {
+            "order_no": "SO-20261125-0099",
+            "customer": self.customer.pk,
+            "title": "欄位鎖定測試訂單",
+            "quote_date": "2026-11-25",
+            "valid_until": "2026-12-02",
+            "tax_mode": "tax_exclusive",
+            "discount_amount": "0",
+            "salesperson": self.sales_user.pk,
+            "item_row_uid": ["r_1", "r_2", "r_3", "r_4"],
+            "item_type": ["license", "hardware", "warranty", "service"],
+            "item_name": ["竄改軟體名", "竄改硬體名", "竄改保固名", "客製化顧問導入"],
+            "item_description": ["", "", "", "到場教育訓練"],
+            "item_product": [str(self.product.pk), "", "", ""],
+            "item_license_type": ["perpetual", "", "", ""],
+            "item_hardware_model": ["", str(self.hw_model.pk), "", ""],
+            "item_start_date": ["", "", "", ""],
+            "item_end_date": ["", "", "", ""],
+            "item_warranty_days": ["", "", "365", ""],
+            "item_warranty_order_targets": ["", "", "r_1", ""],
+            "item_warranty_existing_licenses": ["", "", "", ""],
+            "item_warranty_existing_devices": ["", "", "", ""],
+            "item_sla_level": ["", "", "5x8", ""],
+            "item_quantity": ["1", "1", "1", "2"],
+            "item_unit": ["竄改單位A", "竄改單位B", "竄改單位C", "人天"],
+            "item_unit_price": ["10000", "20000", "5000", "8000"],
+        }
+        resp = self.client.post(reverse("order-create"), data=post_data)
+        self.assertEqual(resp.status_code, 302)
+        order = Order.objects.get(order_no="SO-20261125-0099")
+        items = list(order.items.all())
+
+        # 軟體授權與硬體設備強制帶入主檔名稱與單位
+        self.assertEqual(items[0].name, self.product.name)
+        self.assertEqual(items[0].unit, self.product.default_unit)
+        self.assertEqual(items[1].name, self.hw_model.name)
+        self.assertEqual(items[1].unit, "台")
+        # 維護保固自動組合名稱且單位鎖定為「式」
+        self.assertIn(self.product.name, items[2].name)
+        self.assertIn("365天", items[2].name)
+        self.assertEqual(items[2].unit, "式")
+        # 僅專業服務/其他保留自訂名稱與單位
+        self.assertEqual(items[3].name, "客製化顧問導入")
+        self.assertEqual(items[3].unit, "人天")
+
+    def test_warranty_requires_target_and_valid_days(self):
+        self.client.force_login(self.sales_user)
+        # 未勾選任何標的 -> 阻擋建單
+        post_data = {
+            "order_no": "SO-20261125-0088",
+            "customer": self.customer.pk,
+            "title": "缺少標的測試",
+            "quote_date": "2026-11-25",
+            "valid_until": "2026-12-02",
+            "tax_mode": "tax_exclusive",
+            "discount_amount": "0",
+            "salesperson": self.sales_user.pk,
+            "item_row_uid": ["r_1"],
+            "item_type": ["warranty"],
+            "item_name": ["維護保固"],
+            "item_description": [""],
+            "item_product": [""],
+            "item_license_type": [""],
+            "item_hardware_model": [""],
+            "item_start_date": [""],
+            "item_end_date": [""],
+            "item_warranty_days": ["365"],
+            "item_warranty_order_targets": [""],
+            "item_warranty_existing_licenses": [""],
+            "item_warranty_existing_devices": [""],
+            "item_sla_level": ["5x8"],
+            "item_quantity": ["1"],
+            "item_unit": ["式"],
+            "item_unit_price": ["15000"],
+        }
+        resp = self.client.post(reverse("order-create"), data=post_data)
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(Order.objects.filter(order_no="SO-20261125-0088").exists())
+        self.assertTrue(resp.context["item_errors"])
+
+    def test_warranty_only_order_for_existing_customer_products_and_approval_date_calc(self):
+        from zoneinfo import ZoneInfo
+        from django.utils import timezone
+
+        # 建立客戶既購已核准授權與已出貨硬體
+        existing_lic = CustomerLicense.objects.create(
+            customer=self.customer,
+            product=self.product,
+            license_no="LIC-OLD-0001",
+            license_type=CustomerLicense.TYPE_PERPETUAL,
+            quantity=1,
+            unit="套",
+            approval_status=CustomerLicense.APPROVAL_APPROVED,
+            is_disabled=False,
+        )
+        existing_dev = HardwareDevice.objects.create(
+            code="SN-OLD-001",
+            model=self.hw_model,
+            status=HardwareDevice.STATUS_SHIPPED,
+            customer=self.customer,
+        )
+
+        self.client.force_login(self.sales_user)
+        post_data = {
+            "order_no": "SO-20261125-0077",
+            "customer": self.customer.pk,
+            "title": "既有產品續保專案",
+            "quote_date": "2026-11-25",
+            "valid_until": "2026-12-02",
+            "tax_mode": "tax_exclusive",
+            "discount_amount": "0",
+            "salesperson": self.sales_user.pk,
+            "item_row_uid": ["r_1"],
+            "item_type": ["warranty"],
+            "item_name": ["維護保固"],
+            "item_description": ["年度維護續約"],
+            "item_product": [""],
+            "item_license_type": [""],
+            "item_hardware_model": [""],
+            "item_start_date": [""],
+            "item_end_date": [""],
+            "item_warranty_days": ["180"],
+            "item_warranty_order_targets": [""],
+            "item_warranty_existing_licenses": [str(existing_lic.pk)],
+            "item_warranty_existing_devices": [str(existing_dev.pk)],
+            "item_sla_level": ["7x24"],
+            "item_quantity": ["1"],
+            "item_unit": ["式"],
+            "item_unit_price": ["30000"],
+        }
+        resp = self.client.post(reverse("order-create"), data=post_data)
+        self.assertEqual(resp.status_code, 302)
+        order = Order.objects.get(order_no="SO-20261125-0077")
+        w_item = order.items.get()
+
+        # 審核前不應有起訖日，僅記錄保固天數與既購標的
+        self.assertEqual(w_item.warranty_days, 180)
+        self.assertIsNone(w_item.start_date)
+        self.assertIsNone(w_item.end_date)
+        self.assertIn(existing_lic, w_item.warranty_existing_licenses.all())
+        self.assertIn(existing_dev, w_item.warranty_existing_devices.all())
+
+        # 送審並由主管核准 -> 依審核當日起算 180 天並自動開立 MA- 維護合約
+        self.client.post(
+            reverse("order-submit", kwargs={"pk": order.pk}),
+            data={"no_signed_quote_reason": "續約已確認"},
+        )
+        self.client.force_login(self.manager_user)
+        self.client.post(reverse("order-approve", kwargs={"pk": order.pk}))
+
+        today_tw = timezone.now().astimezone(ZoneInfo("Asia/Taipei")).date()
+        expected_end = today_tw + datetime.timedelta(days=180)
+        w_item.refresh_from_db()
+        ct = MaintenanceContract.objects.get(source_order=order)
+        self.assertTrue(ct.contract_no.startswith("MA-"))
+        self.assertEqual(ct.start_date, today_tw)
+        self.assertEqual(ct.end_date, expected_end)
+        self.assertEqual(w_item.start_date, today_tw)
+        self.assertEqual(w_item.end_date, expected_end)
+        self.assertIn(existing_lic, ct.licenses.all())
+        self.assertIn(existing_dev, ct.probes.all())
+
+    def test_warranty_selective_same_order_hardware_binding(self):
+        hw_model_b = HardwareModel.objects.create(model_code="NP-200", name="NP-2000 備援設備")
+        dev_b = HardwareDevice.objects.create(code="SN-B-001", model=hw_model_b, status=HardwareDevice.STATUS_AVAILABLE)
+
+        self.client.force_login(self.sales_user)
+        post_data = {
+            "order_no": "SO-20261125-0066",
+            "customer": self.customer.pk,
+            "title": "指定硬體保固綁定測試",
+            "quote_date": "2026-11-25",
+            "valid_until": "2026-12-02",
+            "tax_mode": "tax_exclusive",
+            "discount_amount": "0",
+            "salesperson": self.sales_user.pk,
+            "item_row_uid": ["r_1", "r_2", "r_3"],
+            "item_type": ["hardware", "hardware", "warranty"],
+            "item_name": ["", "", ""],
+            "item_description": ["", "", "僅保固第一項硬體"],
+            "item_product": ["", "", ""],
+            "item_license_type": ["", "", ""],
+            "item_hardware_model": [str(self.hw_model.pk), str(hw_model_b.pk), ""],
+            "item_start_date": ["", "", ""],
+            "item_end_date": ["", "", ""],
+            "item_warranty_days": ["", "", "365"],
+            "item_warranty_order_targets": ["", "", "r_1"],
+            "item_warranty_existing_licenses": ["", "", ""],
+            "item_warranty_existing_devices": ["", "", ""],
+            "item_sla_level": ["", "", "5x8"],
+            "item_quantity": ["1", "1", "1"],
+            "item_unit": ["台", "台", "式"],
+            "item_unit_price": ["50000", "60000", "10000"],
+        }
+        resp = self.client.post(reverse("order-create"), data=post_data)
+        self.assertEqual(resp.status_code, 302)
+        order = Order.objects.get(order_no="SO-20261125-0066")
+
+        self.client.post(reverse("order-submit", kwargs={"pk": order.pk}), data={"no_signed_quote_reason": "急單"})
+        self.client.force_login(self.manager_user)
+        self.client.post(reverse("order-approve", kwargs={"pk": order.pk}))
+
+        hw_item_1 = order.items.get(sort_order=1)
+        hw_item_2 = order.items.get(sort_order=2)
+        self.client.force_login(self.engineer_user)
+        self.client.post(
+            reverse("order-ship", kwargs={"pk": order.pk}),
+            data={
+                f"devices_item_{hw_item_1.pk}": [str(self.dev1.pk)],
+                f"devices_item_{hw_item_2.pk}": [str(dev_b.pk)],
+                "shipment_note": "雙機出貨",
+            },
+        )
+        ct = MaintenanceContract.objects.get(source_order=order)
+        self.assertIn(self.dev1, ct.probes.all())
+        self.assertNotIn(dev_b, ct.probes.all())

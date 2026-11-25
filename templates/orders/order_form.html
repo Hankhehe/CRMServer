@@ -185,6 +185,13 @@ const CUSTOMERS_CATALOG = {{ customers_json|safe }};
 const PRODUCTS_CATALOG = {{ products_json|safe }};
 const HW_MODELS_CATALOG = {{ hw_models_json|safe }};
 const INITIAL_ITEMS = {{ initial_items_json|safe }};
+const IS_EDIT_MODE = {{ is_edit|yesno:"true,false" }};
+
+let ROW_UID_COUNTER = 1;
+
+function nextRowUid() {
+  return 'r_' + (ROW_UID_COUNTER++);
+}
 
 function buildProductOptions(selectedId) {
   let html = '<option value="">-- 請選擇軟體產品主檔 --</option>';
@@ -212,16 +219,32 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
+function getCsvArray(val) {
+  return String(val || '').split(',').map(s => s.trim()).filter(Boolean);
+}
+
 function addItemRow(type, data) {
   const container = document.getElementById('items-container');
   const d = data || {};
   const rowType = d.item_type || type || 'license';
+  const rowUid = d.row_uid || nextRowUid();
+
+  const initOrderTargets = Array.isArray(d.warranty_order_targets) ? d.warranty_order_targets.join(',') : '';
+  const initExistLicIds = Array.isArray(d.warranty_existing_license_ids) ? d.warranty_existing_license_ids.join(',') : '';
+  const initExistDevIds = Array.isArray(d.warranty_existing_device_ids) ? d.warranty_existing_device_ids.join(',') : '';
+  const initWarrantyDays = d.warranty_days || 365;
 
   const row = document.createElement('div');
   row.className = 'order-item-row';
+  row.dataset.rowUid = rowUid;
   row.style.cssText = 'border: 1px solid #e2e8f0; border-radius: 10px; padding: 1rem; background: #fafbfc;';
 
   row.innerHTML = `
+    <input type="hidden" name="item_row_uid" class="item-row-uid-input" value="${escapeHtml(rowUid)}">
+    <input type="hidden" name="item_warranty_order_targets" class="item-warranty-order-targets-input" value="${escapeHtml(initOrderTargets)}">
+    <input type="hidden" name="item_warranty_existing_licenses" class="item-warranty-existing-licenses-input" value="${escapeHtml(initExistLicIds)}">
+    <input type="hidden" name="item_warranty_existing_devices" class="item-warranty-existing-devices-input" value="${escapeHtml(initExistDevIds)}">
+
     <div style="display: grid; grid-template-columns: 160px 1fr 1fr 100px 80px 130px 130px 42px; gap: 0.6rem; align-items: end;">
       <div>
         <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted);">品項類型</label>
@@ -234,7 +257,7 @@ function addItemRow(type, data) {
       </div>
       <div>
         <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted);">品項名稱 *</label>
-        <input type="text" name="item_name" class="form-control item-name-input" value="${escapeHtml(d.name)}" placeholder="品項名稱" required>
+        <input type="text" name="item_name" class="form-control item-name-input" value="${escapeHtml(d.name)}" placeholder="選擇主檔後自動帶入" required>
       </div>
       <div>
         <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted);">規格 / 備註說明</label>
@@ -246,7 +269,7 @@ function addItemRow(type, data) {
       </div>
       <div>
         <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted);">單位</label>
-        <input type="text" name="item_unit" class="form-control item-unit-input" value="${escapeHtml(d.unit || (rowType==='hardware'?'台':(rowType==='warranty'?'年':'式')))}">
+        <input type="text" name="item_unit" class="form-control item-unit-input" value="${escapeHtml(d.unit || (rowType==='hardware'?'台':'式'))}">
       </div>
       <div>
         <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted);">單價 (NT$)</label>
@@ -266,7 +289,7 @@ function addItemRow(type, data) {
     <div class="item-extra-fields" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.6rem; margin-top: 0.65rem; padding-top: 0.65rem; border-top: 1px dashed #e2e8f0;">
       <div class="field-product" style="display: none;">
         <label style="font-size: 0.74rem; color: var(--text-muted);">綁定軟體產品主檔 *</label>
-        <select name="item_product" class="form-control" onchange="onProductSelect(this)">
+        <select name="item_product" class="form-control item-product-select" onchange="onProductSelect(this)">
           ${buildProductOptions(d.product_id)}
         </select>
       </div>
@@ -280,21 +303,45 @@ function addItemRow(type, data) {
       </div>
       <div class="field-hw-model" style="display: none;">
         <label style="font-size: 0.74rem; color: var(--text-muted);">綁定硬體規格主檔 *</label>
-        <select name="item_hardware_model" class="form-control" onchange="onHwModelSelect(this)">
+        <select name="item_hardware_model" class="form-control item-hw-model-select" onchange="onHwModelSelect(this)">
           ${buildHwModelOptions(d.hardware_model_id)}
         </select>
       </div>
       <div class="field-dates" style="display: none;">
-        <label style="font-size: 0.74rem; color: var(--text-muted);">起日 (授權/保固)</label>
+        <label style="font-size: 0.74rem; color: var(--text-muted);">起日 (授權)</label>
         <input type="date" name="item_start_date" class="form-control" value="${escapeHtml(d.start_date)}">
       </div>
       <div class="field-dates" style="display: none;">
-        <label style="font-size: 0.74rem; color: var(--text-muted);">訖日 (授權/保固)</label>
+        <label style="font-size: 0.74rem; color: var(--text-muted);">訖日 (授權)</label>
         <input type="date" name="item_end_date" class="form-control" value="${escapeHtml(d.end_date)}">
+      </div>
+      <div class="field-warranty-days" style="display: none;">
+        <label style="font-size: 0.74rem; color: var(--text-muted);">維護保固天數 (天) *</label>
+        <input type="number" name="item_warranty_days" class="form-control item-warranty-days-input" min="1" step="1" value="${escapeHtml(initWarrantyDays)}" placeholder="例如: 365" oninput="updateWarrantyRowAutoName(this.closest('.order-item-row'))">
+        <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 2px;">訂單主管審核通過當日起算到期日</div>
       </div>
       <div class="field-sla" style="display: none;">
         <label style="font-size: 0.74rem; color: var(--text-muted);">服務等級 (SLA)</label>
         <input type="text" name="item_sla_level" class="form-control" value="${escapeHtml(d.sla_level)}" placeholder="例如: 5x8 / 7x24">
+      </div>
+      <div class="field-warranty-targets" style="display: none; grid-column: 1 / -1; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0.75rem 0.9rem;">
+        <div style="font-size: 0.78rem; font-weight: 700; color: #059669; margin-bottom: 0.5rem;">
+          <i class="fa-solid fa-shield-halved"></i> 維護保固涵蓋標的（必選至少一項：可勾選本單新購軟硬體、客戶已購產品或混選）
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0.75rem;">
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.6rem 0.75rem;">
+            <div style="font-size: 0.74rem; font-weight: 700; color: #475569; margin-bottom: 0.35rem;">
+              <i class="fa-solid fa-cart-plus" style="color: var(--primary);"></i> 本訂單新購軟硬體明細
+            </div>
+            <div class="warranty-order-targets-box" style="display: flex; flex-direction: column; gap: 0.3rem; max-height: 150px; overflow-y: auto; font-size: 0.8rem;"></div>
+          </div>
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.6rem 0.75rem;">
+            <div style="font-size: 0.74rem; font-weight: 700; color: #475569; margin-bottom: 0.35rem;">
+              <i class="fa-solid fa-building-shield" style="color: #0284c7;"></i> 該客戶已購軟體授權與已出貨硬體
+            </div>
+            <div class="warranty-existing-targets-box" style="display: flex; flex-direction: column; gap: 0.3rem; max-height: 150px; overflow-y: auto; font-size: 0.8rem;"></div>
+          </div>
+        </div>
       </div>
     </div>
   `;
@@ -304,39 +351,263 @@ function addItemRow(type, data) {
   recalcTotals();
 }
 
+function applyNameUnitLock(row, itemType) {
+  const nameInput = row.querySelector('.item-name-input');
+  const unitInput = row.querySelector('.item-unit-input');
+  const isEditable = itemType === 'service';
+
+  nameInput.readOnly = !isEditable;
+  unitInput.readOnly = !isEditable;
+
+  const lockStyleBg = isEditable ? '' : '#f1f5f9';
+  const lockCursor = isEditable ? '' : 'not-allowed';
+  nameInput.style.background = lockStyleBg;
+  nameInput.style.cursor = lockCursor;
+  unitInput.style.background = lockStyleBg;
+  unitInput.style.cursor = lockCursor;
+
+  if (itemType === 'service') {
+    nameInput.placeholder = '請輸入專業服務或客製項目名稱';
+    nameInput.title = '';
+    unitInput.title = '';
+  } else if (itemType === 'warranty') {
+    nameInput.placeholder = '依涵蓋標的與保固天數自動帶入';
+    nameInput.title = '維護保固名稱由系統依涵蓋標的與保固天數自動產生';
+    unitInput.title = '僅「專業服務/其他」可編輯單位';
+    unitInput.value = '式';
+  } else {
+    nameInput.placeholder = '選擇主檔後自動帶入';
+    nameInput.title = '僅「專業服務/其他」可編輯品項名稱';
+    unitInput.title = '僅「專業服務/其他」可編輯單位';
+  }
+}
+
 function onItemTypeChange(selectEl) {
   const row = selectEl.closest('.order-item-row');
   const val = selectEl.value;
   row.querySelector('.field-product').style.display = val === 'license' ? 'block' : 'none';
   row.querySelector('.field-lic-type').style.display = val === 'license' ? 'block' : 'none';
   row.querySelector('.field-hw-model').style.display = val === 'hardware' ? 'block' : 'none';
-  row.querySelector('.field-sla').style.display = val === 'warranty' ? 'block' : 'none';
+  row.querySelector('.field-dates').style.display = val === 'license' ? 'block' : 'none';
   row.querySelectorAll('.field-dates').forEach(el => {
-    el.style.display = (val === 'license' || val === 'warranty') ? 'block' : 'none';
+    el.style.display = val === 'license' ? 'block' : 'none';
   });
+  row.querySelector('.field-warranty-days').style.display = val === 'warranty' ? 'block' : 'none';
+  row.querySelector('.field-sla').style.display = val === 'warranty' ? 'block' : 'none';
+  row.querySelector('.field-warranty-targets').style.display = val === 'warranty' ? 'block' : 'none';
   row.querySelector('.item-extra-fields').style.display = val === 'service' ? 'none' : 'grid';
+
+  applyNameUnitLock(row, val);
+
+  if (val === 'license') {
+    const prodSel = row.querySelector('.item-product-select');
+    if (prodSel && prodSel.value) {
+      onProductSelect(prodSel);
+    } else {
+      row.querySelector('.item-name-input').value = '';
+      row.querySelector('.item-unit-input').value = '台';
+    }
+  } else if (val === 'hardware') {
+    const hwSel = row.querySelector('.item-hw-model-select');
+    if (hwSel && hwSel.value) {
+      onHwModelSelect(hwSel);
+    } else {
+      row.querySelector('.item-name-input').value = '';
+      row.querySelector('.item-unit-input').value = '台';
+    }
+  } else if (val === 'warranty') {
+    row.querySelector('.item-unit-input').value = '式';
+    const daysInput = row.querySelector('.item-warranty-days-input');
+    if (!daysInput.value) daysInput.value = 365;
+  }
+
+  refreshAllWarrantyTargetPanels();
 }
 
 function onProductSelect(sel) {
   const opt = sel.options[sel.selectedIndex];
   const row = sel.closest('.order-item-row');
+  const nameInput = row.querySelector('.item-name-input');
+  const unitInput = row.querySelector('.item-unit-input');
   if (opt && opt.value) {
-    const nameInput = row.querySelector('.item-name-input');
-    const unitInput = row.querySelector('.item-unit-input');
-    if (!nameInput.value.trim()) nameInput.value = opt.dataset.name || '';
-    if (opt.dataset.unit) unitInput.value = opt.dataset.unit;
+    nameInput.value = opt.dataset.name || '';
+    unitInput.value = opt.dataset.unit || '台';
+  } else {
+    nameInput.value = '';
+    unitInput.value = '台';
   }
+  refreshAllWarrantyTargetPanels();
 }
 
 function onHwModelSelect(sel) {
   const opt = sel.options[sel.selectedIndex];
   const row = sel.closest('.order-item-row');
+  const nameInput = row.querySelector('.item-name-input');
+  const unitInput = row.querySelector('.item-unit-input');
   if (opt && opt.value) {
-    const nameInput = row.querySelector('.item-name-input');
-    const unitInput = row.querySelector('.item-unit-input');
-    if (!nameInput.value.trim()) nameInput.value = opt.dataset.name || '';
+    nameInput.value = opt.dataset.name || '';
+    unitInput.value = '台';
+  } else {
+    nameInput.value = '';
     unitInput.value = '台';
   }
+  refreshAllWarrantyTargetPanels();
+}
+
+function getSameOrderEligibleTargets() {
+  const list = [];
+  let seq = 0;
+  document.querySelectorAll('.order-item-row').forEach(r => {
+    seq += 1;
+    const t = r.querySelector('.item-type-select').value;
+    if (t === 'license' || t === 'hardware') {
+      const uid = r.dataset.rowUid;
+      const nameVal = (r.querySelector('.item-name-input').value || '').trim();
+      const typeLabel = t === 'license' ? '軟體' : '硬體';
+      list.push({
+        uid: uid,
+        seq: seq,
+        type: t,
+        typeLabel: typeLabel,
+        name: nameVal || `(尚未選擇${typeLabel}主檔)`,
+        isReady: Boolean(nameVal),
+      });
+    }
+  });
+  return list;
+}
+
+function refreshAllWarrantyTargetPanels() {
+  const custSelect = document.getElementById('id_customer');
+  const custId = custSelect ? custSelect.value : '';
+  const custInfo = CUSTOMERS_CATALOG[custId] || null;
+  const orderTargets = getSameOrderEligibleTargets();
+
+  document.querySelectorAll('.order-item-row').forEach(wRow => {
+    if (wRow.querySelector('.item-type-select').value !== 'warranty') return;
+    renderWarrantyRowTargets(wRow, orderTargets, custInfo);
+  });
+}
+
+function renderWarrantyRowTargets(wRow, orderTargets, custInfo) {
+  const orderTargetsHidden = wRow.querySelector('.item-warranty-order-targets-input');
+  const existLicHidden = wRow.querySelector('.item-warranty-existing-licenses-input');
+  const existDevHidden = wRow.querySelector('.item-warranty-existing-devices-input');
+
+  const selectedOrderUids = new Set(getCsvArray(orderTargetsHidden.value));
+  const selectedExistLics = new Set(getCsvArray(existLicHidden.value));
+  const selectedExistDevs = new Set(getCsvArray(existDevHidden.value));
+
+  // 1. 本訂單新購軟硬體明細
+  const orderBox = wRow.querySelector('.warranty-order-targets-box');
+  if (!orderTargets.length) {
+    orderBox.innerHTML = '<div style="color: var(--text-muted); font-size: 0.76rem;">本單尚未加入軟體授權或硬體設備明細</div>';
+    orderTargetsHidden.value = '';
+  } else {
+    const validUids = new Set(orderTargets.map(x => x.uid));
+    const keptOrderUids = [];
+    let html = '';
+    orderTargets.forEach(t => {
+      const checked = selectedOrderUids.has(t.uid);
+      if (checked) keptOrderUids.push(t.uid);
+      html += `
+        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 3px 5px; background: #fff; border: 1px solid #e2e8f0; border-radius: 5px;">
+          <input type="checkbox" class="w-order-target-cb" value="${escapeHtml(t.uid)}" data-label="${escapeHtml(t.name)}" ${checked ? 'checked' : ''} onchange="syncWarrantyTargetsFromDom(this.closest('.order-item-row'))">
+          <span class="badge badge-secondary" style="font-size: 0.68rem;">#${t.seq} ${t.typeLabel}</span>
+          <span>${escapeHtml(t.name)}</span>
+        </label>
+      `;
+    });
+    orderBox.innerHTML = html;
+    orderTargetsHidden.value = keptOrderUids.filter(u => validUids.has(u)).join(',');
+  }
+
+  // 2. 該客戶已購軟體授權與已出貨硬體
+  const existBox = wRow.querySelector('.warranty-existing-targets-box');
+  if (!custInfo) {
+    existBox.innerHTML = '<div style="color: var(--text-muted); font-size: 0.76rem;">請先於上方選擇「採購客戶」，即可載入該客戶已購產品與硬體</div>';
+    existLicHidden.value = '';
+    existDevHidden.value = '';
+  } else {
+    const lics = custInfo.existing_licenses || [];
+    const devs = custInfo.existing_devices || [];
+    if (!lics.length && !devs.length) {
+      existBox.innerHTML = '<div style="color: var(--text-muted); font-size: 0.76rem;">此客戶目前無已核准之軟體授權或已出貨硬體設備</div>';
+      existLicHidden.value = '';
+      existDevHidden.value = '';
+    } else {
+      let html = '';
+      const validLicIds = new Set(lics.map(x => String(x.id)));
+      const validDevIds = new Set(devs.map(x => String(x.id)));
+      const keptLicIds = [];
+      const keptDevIds = [];
+
+      lics.forEach(lic => {
+        const lid = String(lic.id);
+        const checked = selectedExistLics.has(lid);
+        if (checked) keptLicIds.push(lid);
+        html += `
+          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 3px 5px; background: #fff; border: 1px solid #e2e8f0; border-radius: 5px;">
+            <input type="checkbox" class="w-exist-lic-cb" value="${lid}" data-label="${escapeHtml(lic.short_name)}" ${checked ? 'checked' : ''} onchange="syncWarrantyTargetsFromDom(this.closest('.order-item-row'))">
+            <span class="badge badge-secondary" style="font-size: 0.68rem; color: #0284c7;">已購軟體</span>
+            <span>${escapeHtml(lic.label)}</span>
+          </label>
+        `;
+      });
+      devs.forEach(dev => {
+        const did = String(dev.id);
+        const checked = selectedExistDevs.has(did);
+        if (checked) keptDevIds.push(did);
+        html += `
+          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 3px 5px; background: #fff; border: 1px solid #e2e8f0; border-radius: 5px;">
+            <input type="checkbox" class="w-exist-dev-cb" value="${did}" data-label="${escapeHtml(dev.short_name)}" ${checked ? 'checked' : ''} onchange="syncWarrantyTargetsFromDom(this.closest('.order-item-row'))">
+            <span class="badge badge-secondary" style="font-size: 0.68rem; color: #7c3aed;">已購硬體</span>
+            <span>${escapeHtml(dev.label)}</span>
+          </label>
+        `;
+      });
+
+      existBox.innerHTML = html;
+      existLicHidden.value = keptLicIds.filter(id => validLicIds.has(id)).join(',');
+      existDevHidden.value = keptDevIds.filter(id => validDevIds.has(id)).join(',');
+    }
+  }
+
+  updateWarrantyRowAutoName(wRow);
+}
+
+function syncWarrantyTargetsFromDom(wRow) {
+  const orderUids = Array.from(wRow.querySelectorAll('.w-order-target-cb:checked')).map(cb => cb.value);
+  const licIds = Array.from(wRow.querySelectorAll('.w-exist-lic-cb:checked')).map(cb => cb.value);
+  const devIds = Array.from(wRow.querySelectorAll('.w-exist-dev-cb:checked')).map(cb => cb.value);
+
+  wRow.querySelector('.item-warranty-order-targets-input').value = orderUids.join(',');
+  wRow.querySelector('.item-warranty-existing-licenses-input').value = licIds.join(',');
+  wRow.querySelector('.item-warranty-existing-devices-input').value = devIds.join(',');
+
+  updateWarrantyRowAutoName(wRow);
+}
+
+function updateWarrantyRowAutoName(wRow) {
+  if (!wRow || wRow.querySelector('.item-type-select').value !== 'warranty') return;
+  const labels = [];
+  wRow.querySelectorAll('.w-order-target-cb:checked, .w-exist-lic-cb:checked, .w-exist-dev-cb:checked').forEach(cb => {
+    if (cb.dataset.label) labels.push(cb.dataset.label);
+  });
+  const daysVal = parseInt(wRow.querySelector('.item-warranty-days-input').value || '0', 10);
+  const daysSuffix = daysVal > 0 ? ` (${daysVal}天)` : '';
+  let autoName = '';
+  if (labels.length === 0) {
+    autoName = `維護保固服務合約${daysSuffix}`;
+  } else if (labels.length === 1) {
+    autoName = `維護保固 - ${labels[0]}${daysSuffix}`;
+  } else if (labels.length === 2) {
+    autoName = `維護保固 - ${labels[0]}、${labels[1]}${daysSuffix}`;
+  } else {
+    autoName = `維護保固 - ${labels[0]}、${labels[1]} 等 ${labels.length} 項${daysSuffix}`;
+  }
+  wRow.querySelector('.item-name-input').value = autoName.slice(0, 150);
+  wRow.querySelector('.item-unit-input').value = '式';
 }
 
 function removeItemRow(btn) {
@@ -346,6 +617,7 @@ function removeItemRow(btn) {
     return;
   }
   btn.closest('.order-item-row').remove();
+  refreshAllWarrantyTargetPanels();
   recalcTotals();
 }
 
@@ -379,31 +651,59 @@ function recalcTotals() {
   document.getElementById('calc-total').textContent = 'NT$ ' + total.toLocaleString();
 }
 
+function addDaysToIsoDate(isoDateStr, days) {
+  if (!isoDateStr || !/^\d{4}-\d{2}-\d{2}$/.test(isoDateStr)) return '';
+  const parts = isoDateStr.split('-').map(Number);
+  const dt = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  const y = dt.getUTCFullYear();
+  const m = String(dt.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(dt.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 document.addEventListener('DOMContentLoaded', function() {
   const custSelect = document.getElementById('id_customer');
   const cpSelect = document.getElementById('id_contact_person');
   const cName = document.getElementById('id_contact_name');
   const cPhone = document.getElementById('id_contact_phone');
   const cEmail = document.getElementById('id_contact_email');
+  const quoteDateInput = document.getElementById('id_quote_date');
+  const validUntilInput = document.getElementById('id_valid_until');
+
+  let validUntilManuallyEdited = IS_EDIT_MODE;
+  if (validUntilInput) {
+    validUntilInput.addEventListener('change', function() {
+      validUntilManuallyEdited = true;
+    });
+  }
+  if (quoteDateInput && validUntilInput) {
+    quoteDateInput.addEventListener('change', function() {
+      if (!validUntilManuallyEdited && this.value) {
+        validUntilInput.value = addDaysToIsoDate(this.value, 7);
+      }
+    });
+  }
 
   if (custSelect) {
     custSelect.addEventListener('change', function() {
       const info = CUSTOMERS_CATALOG[this.value];
-      if (!info) return;
-      if (cpSelect) {
-        const prevVal = cpSelect.value;
-        cpSelect.innerHTML = '<option value="">-- 自行輸入或從客戶聯絡人選取 --</option>';
-        (info.contacts || []).forEach(cp => {
-          const opt = document.createElement('option');
-          opt.value = cp.id;
-          opt.textContent = cp.title ? `${cp.name} (${cp.title})` : cp.name;
-          if (cp.is_primary) opt.selected = true;
-          cpSelect.appendChild(opt);
-        });
+      if (info) {
+        if (cpSelect) {
+          cpSelect.innerHTML = '<option value="">-- 自行輸入或從客戶聯絡人選取 --</option>';
+          (info.contacts || []).forEach(cp => {
+            const opt = document.createElement('option');
+            opt.value = cp.id;
+            opt.textContent = cp.title ? `${cp.name} (${cp.title})` : cp.name;
+            if (cp.is_primary) opt.selected = true;
+            cpSelect.appendChild(opt);
+          });
+        }
+        cName.value = info.contact || '';
+        cPhone.value = info.phone || '';
+        cEmail.value = info.email || '';
       }
-      cName.value = info.contact || '';
-      cPhone.value = info.phone || '';
-      cEmail.value = info.email || '';
+      refreshAllWarrantyTargetPanels();
     });
   }
 
@@ -423,8 +723,35 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('id_tax_mode').addEventListener('change', recalcTotals);
   document.getElementById('id_discount_amount').addEventListener('input', recalcTotals);
 
+  const mainForm = document.getElementById('orderMainForm');
+  if (mainForm) {
+    mainForm.addEventListener('submit', function(e) {
+      const rows = document.querySelectorAll('.order-item-row');
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        if (r.querySelector('.item-type-select').value === 'warranty') {
+          const daysVal = parseInt(r.querySelector('.item-warranty-days-input').value || '0', 10);
+          if (!daysVal || daysVal <= 0) {
+            e.preventDefault();
+            alert(`第 ${i + 1} 列為「維護保固」，請填寫大於 0 的保固天數。`);
+            return;
+          }
+          const hasOrderTarget = getCsvArray(r.querySelector('.item-warranty-order-targets-input').value).length > 0;
+          const hasExistLic = getCsvArray(r.querySelector('.item-warranty-existing-licenses-input').value).length > 0;
+          const hasExistDev = getCsvArray(r.querySelector('.item-warranty-existing-devices-input').value).length > 0;
+          if (!hasOrderTarget && !hasExistLic && !hasExistDev) {
+            e.preventDefault();
+            alert(`第 ${i + 1} 列為「維護保固」，請至少勾選一項本單新購軟硬體或該客戶已購的產品／硬體。`);
+            return;
+          }
+        }
+      }
+    });
+  }
+
   if (INITIAL_ITEMS && INITIAL_ITEMS.length > 0) {
     INITIAL_ITEMS.forEach(item => addItemRow(item.item_type, item));
+    refreshAllWarrantyTargetPanels();
   } else {
     addItemRow('license');
   }

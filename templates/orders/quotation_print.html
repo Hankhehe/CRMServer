@@ -263,7 +263,7 @@
         <div><strong>報價單號：</strong><span style="font-family: monospace; font-weight: 700;">{{ quote.order_no }}-v{{ display_version_no }}</span></div>
         <div><strong>專案主旨：</strong>{{ quote.title }}</div>
         <div><strong>報價日期：</strong>{{ quote.quote_date|default:"-" }}</div>
-        <div><strong>有效期限：</strong>{{ quote.valid_until|default:"報價日起 30 日" }}</div>
+        <div><strong>有效期限：</strong>{{ quote.valid_until|default:"報價日起 7 日" }}</div>
         <div><strong>經辦業務：</strong>{{ quote.salesperson_name|default:"-" }}</div>
       </div>
     </div>
@@ -288,7 +288,16 @@
             <td>
               <div style="font-weight: 700;">{{ item.name }}</div>
               {% if item.description %}<div style="font-size: 11.5px; color: #475569;">{{ item.description }}</div>{% endif %}
-              {% if item.start_date or item.end_date %}
+              {% if item.warranty_targets_display %}
+                <div style="font-size: 11.5px; color: #475569;">涵蓋標的：{{ item.warranty_targets_display|join:"、" }}</div>
+              {% endif %}
+              {% if item.item_type == 'warranty' and item.warranty_days %}
+                {% if item.start_date or item.end_date %}
+                  <div style="font-size: 11.5px; color: #475569;">保固期間：{{ item.start_date|default:"-" }} ~ {{ item.end_date|default:"-" }} ({{ item.warranty_days }} 天){% if item.sla_level %} ｜ SLA: {{ item.sla_level }}{% endif %}</div>
+                {% else %}
+                  <div style="font-size: 11.5px; color: #475569;">保固天數：{{ item.warranty_days }} 天（審核通過後起算）{% if item.sla_level %} ｜ SLA: {{ item.sla_level }}{% endif %}</div>
+                {% endif %}
+              {% elif item.start_date or item.end_date %}
                 <div style="font-size: 11.5px; color: #475569;">期間：{{ item.start_date|default:"-" }} ~ {{ item.end_date|default:"永久" }}{% if item.sla_level %} ｜ SLA: {{ item.sla_level }}{% endif %}</div>
               {% endif %}
             </td>

@@ -52,7 +52,7 @@ class OrderForm(forms.ModelForm):
             "salesperson",
         ]
         widgets = {
-            "order_no": forms.TextInput(attrs={"class": "form-control", "placeholder": "例如: ORD-20261125-0001"}),
+            "order_no": forms.TextInput(attrs={"class": "form-control", "placeholder": "例如: SO-20261125-0001"}),
             "contact_person": forms.Select(attrs={"class": "form-control", "id": "id_contact_person"}),
             "contact_name": forms.TextInput(attrs={"class": "form-control", "id": "id_contact_name", "placeholder": "聯絡窗口姓名"}),
             "contact_phone": forms.TextInput(attrs={"class": "form-control", "id": "id_contact_phone", "placeholder": "聯絡電話"}),
