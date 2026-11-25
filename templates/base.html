@@ -124,6 +124,47 @@
       display: flex;
       flex-direction: column;
       gap: 0.35rem;
+      flex: 1;
+    }
+    .sidebar-footer {
+      margin-top: 1rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid var(--glass-border);
+      flex-shrink: 0;
+    }
+    .sidebar-version-btn {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      padding: 0.55rem 0.75rem;
+      border-radius: 10px;
+      border: 1px solid var(--glass-border);
+      background: rgba(248, 250, 252, 0.85);
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+      font-family: inherit;
+    }
+    .sidebar-version-btn:hover {
+      background: var(--primary-light);
+      color: var(--primary);
+      border-color: rgba(79, 70, 229, 0.25);
+    }
+    .version-btn-left {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.55rem;
+      white-space: nowrap;
+    }
+    .version-collapsed-badge {
+      display: none;
+      font-size: 0.7rem;
+      font-weight: 700;
+      line-height: 1.2;
     }
     .nav-link {
       display: flex;
@@ -233,6 +274,17 @@
     .sidebar-collapsed .nav-link:hover::before {
       opacity: 1;
       visibility: visible;
+    }
+    .sidebar-collapsed .sidebar-version-btn {
+      justify-content: center;
+      padding: 0.45rem 0.2rem;
+    }
+    .sidebar-collapsed .version-btn-left,
+    .sidebar-collapsed .version-arrow {
+      display: none;
+    }
+    .sidebar-collapsed .version-collapsed-badge {
+      display: inline-block;
     }
 
     .main-content {
@@ -633,6 +685,17 @@
       {% endif %}
       {% endif %}
     </div>
+
+    <div class="sidebar-footer">
+      <button type="button" id="open-version-modal-btn" class="sidebar-version-btn" data-tooltip="版本 {{ app_version_display }}（點擊查看更新歷程）" title="CRM Server {{ app_version_display }}{% if app_release_date %} ({{ app_release_date }}){% endif %} - 點擊查看更新歷程">
+        <span class="version-btn-left">
+          <i class="fa-solid fa-tag"></i>
+          <span class="version-full-label">版本 {{ app_version_display }}</span>
+        </span>
+        <span class="version-arrow"><i class="fa-solid fa-circle-info"></i></span>
+        <span class="version-collapsed-badge">{{ app_version_display }}</span>
+      </button>
+    </div>
   </aside>
 
   <!-- Main Content Area -->
@@ -789,6 +852,7 @@
   </script>
   {% endif %}
   {% if request.user.is_authenticated %}
+    {% include "components/version_info_modal.html" %}
     {% if can_view_crm or can_manage_system or request.user.is_superuser %}
       {% include "components/certificate_export_modal.html" %}
     {% endif %}

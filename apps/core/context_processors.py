@@ -19,6 +19,7 @@ from .permissions import (
     get_user_role,
 )
 from .models import SystemSetting
+from .versioning import get_version_context
 
 
 def permission_context(request):
@@ -35,7 +36,7 @@ def permission_context(request):
         require_hardware_approval = False
 
     if not request.user.is_authenticated:
-        return {
+        ctx = {
             "can_view_crm": False,
             "can_edit_customers": False,
             "can_edit_licenses": False,
@@ -65,6 +66,8 @@ def permission_context(request):
             "nav_pending_hardware_count": 0,
             "nav_actionable_orders_count": 0,
         }
+        ctx.update(get_version_context(include_changelog=False, include_admin_meta=False))
+        return ctx
 
     c_view_crm = user_can_view_crm(request.user)
     c_cust = user_can_edit_customers(request.user)
@@ -131,7 +134,7 @@ def permission_context(request):
     except Exception:
         pass
 
-    return {
+    ctx = {
         "can_view_crm": c_view_crm,
         "can_edit_customers": c_cust,
         "can_edit_licenses": c_lic,
@@ -161,3 +164,10 @@ def permission_context(request):
         "nav_pending_hardware_count": nav_pending_hardware_count,
         "nav_actionable_orders_count": nav_actionable_orders_count,
     }
+    ctx.update(
+        get_version_context(
+            include_changelog=True,
+            include_admin_meta=(c_sys or request.user.is_superuser),
+        )
+    )
+    return ctx

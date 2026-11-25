@@ -1,0 +1,288 @@
+<style>
+  .version-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.58);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 1250;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 1.25rem;
+  }
+  .version-modal-overlay.is-open {
+    display: flex;
+  }
+  .version-modal-dialog {
+    background: #ffffff;
+    border-radius: 16px;
+    width: 100%;
+    max-width: 640px;
+    max-height: 82vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.35);
+    overflow: hidden;
+  }
+  .version-modal-header {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--glass-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #f8fafc;
+  }
+  .version-modal-title {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-main);
+  }
+  .version-modal-close {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.2rem;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+  }
+  .version-modal-close:hover {
+    background: rgba(15, 23, 42, 0.08);
+    color: var(--text-main);
+  }
+  .version-modal-summary {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--glass-border);
+    background: linear-gradient(135deg, rgba(79, 70, 229, 0.06) 0%, rgba(248, 250, 252, 0.9) 100%);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+  .version-summary-main {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+  }
+  .version-pill-current {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.7rem;
+    border-radius: 9999px;
+    background: var(--primary);
+    color: #ffffff;
+    font-size: 0.82rem;
+    font-weight: 700;
+  }
+  .version-summary-meta {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+  }
+  .version-summary-meta code {
+    background: rgba(15, 23, 42, 0.06);
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.76rem;
+    color: var(--text-main);
+  }
+  .version-modal-body {
+    padding: 1.25rem 1.5rem;
+    overflow-y: auto;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  .changelog-release-card {
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    padding: 1rem 1.15rem;
+    background: #ffffff;
+  }
+  .changelog-release-card.is-current {
+    border-color: rgba(79, 70, 229, 0.3);
+    background: rgba(79, 70, 229, 0.02);
+  }
+  .changelog-release-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--glass-border);
+  }
+  .changelog-release-ver {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 700;
+    font-size: 0.98rem;
+    color: var(--text-main);
+  }
+  .changelog-current-tag {
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.15rem 0.5rem;
+    border-radius: 9999px;
+    background: rgba(16, 185, 129, 0.14);
+    color: #059669;
+  }
+  .changelog-release-date {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+  .changelog-section {
+    margin-top: 0.6rem;
+  }
+  .changelog-section:first-of-type {
+    margin-top: 0;
+  }
+  .changelog-section-title {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--primary);
+    margin-bottom: 0.35rem;
+  }
+  .changelog-items {
+    list-style: disc;
+    padding-left: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+  .changelog-items li {
+    font-size: 0.86rem;
+    line-height: 1.5;
+    color: var(--text-main);
+  }
+  .changelog-items code {
+    background: #f1f5f9;
+    padding: 0.08rem 0.35rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    color: #334155;
+  }
+</style>
+
+<div id="version-info-modal-overlay" class="version-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="version-modal-title">
+  <div class="version-modal-dialog">
+    <div class="version-modal-header">
+      <div id="version-modal-title" class="version-modal-title">
+        <i class="fa-solid fa-code-branch" style="color: var(--primary);"></i>
+        <span>系統版本與更新歷程</span>
+      </div>
+      <button type="button" id="version-modal-close-btn" class="version-modal-close" aria-label="關閉版本資訊">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+
+    <div class="version-modal-summary">
+      <div class="version-summary-main">
+        <strong style="font-size: 0.95rem;">CRM Server</strong>
+        <span class="version-pill-current">{{ app_version_display }}</span>
+        {% if app_release_date %}
+          <span style="font-size: 0.82rem; color: var(--text-muted);">發布日期：{{ app_release_date }}</span>
+        {% endif %}
+      </div>
+      {% if can_manage_system or request.user.is_superuser %}
+        {% if app_git_commit %}
+          <div class="version-summary-meta">
+            <span>Commit: <code>{{ app_git_commit }}</code></span>
+            {% if app_git_branch %}
+              <span>Branch: <code>{{ app_git_branch }}</code></span>
+            {% endif %}
+          </div>
+        {% endif %}
+      {% endif %}
+    </div>
+
+    <div class="version-modal-body">
+      {% if app_changelog %}
+        {% for release in app_changelog %}
+          <div class="changelog-release-card {% if release.version == app_version %}is-current{% endif %}">
+            <div class="changelog-release-header">
+              <div class="changelog-release-ver">
+                <span>{{ release.display_version }}</span>
+                {% if release.version == app_version %}
+                  <span class="changelog-current-tag">目前版本</span>
+                {% endif %}
+              </div>
+              {% if release.date %}
+                <span class="changelog-release-date">{{ release.date }}</span>
+              {% endif %}
+            </div>
+            {% for section in release.sections %}
+              <div class="changelog-section">
+                <div class="changelog-section-title">{{ section.title }}</div>
+                <ul class="changelog-items">
+                  {% for item in section.items %}
+                    <li>{{ item }}</li>
+                  {% endfor %}
+                </ul>
+              </div>
+            {% endfor %}
+          </div>
+        {% endfor %}
+      {% else %}
+        <div style="text-align: center; padding: 2rem 1rem; color: var(--text-muted); font-size: 0.9rem;">
+          <i class="fa-solid fa-circle-info" style="font-size: 1.5rem; margin-bottom: 0.5rem; display: block;"></i>
+          尚無可顯示的更新歷程紀錄。
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const openBtn = document.getElementById('open-version-modal-btn');
+    const overlay = document.getElementById('version-info-modal-overlay');
+    const closeBtn = document.getElementById('version-modal-close-btn');
+
+    if (!openBtn || !overlay) return;
+
+    function openVersionModal() {
+      overlay.classList.add('is-open');
+    }
+
+    function closeVersionModal() {
+      overlay.classList.remove('is-open');
+    }
+
+    openBtn.addEventListener('click', openVersionModal);
+
+    if (closeBtn) {
+      closeBtn.addEventListener('click', closeVersionModal);
+    }
+
+    overlay.addEventListener('click', function(event) {
+      if (event.target === overlay) {
+        closeVersionModal();
+      }
+    });
+
+    document.addEventListener('keydown', function(event) {
+      if (event.key === 'Escape' && overlay.classList.contains('is-open')) {
+        closeVersionModal();
+      }
+    });
+  });
+</script>

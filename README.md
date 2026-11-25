@@ -20,11 +20,16 @@
 * **硬體設備庫存主檔 (`HardwareDevice`)**：完整序號追蹤、型號規格、供應商、庫存狀態、借測歸還預警與客製硬體覆寫。
 * **庫存異動與出貨簽核 (`InventoryTransaction`, `HardwareOutboundApproval`)**：完整記錄入庫、出貨、借測、歸還、退貨與報廢流程及審計資訊。
 
-### 4. ⚙️ 系統核心與安全授權 (`apps/core`)
-* **總覽儀表板 (`Dashboard`)**：彙整客戶、合約到期、授權與硬體庫存警示。
+### 4. 💼 訂單與報價管理模組 (`apps/orders`)
+* **報價單與訂單流程**：支援客戶報價單與訂單建立、明細管理、賣方範本設定與報價單列印。
+* **多階段簽核與串接**：支援送審、主管簽核、出貨作業、收款確認與結案，並串接硬體設備、軟體授權與維護合約來源單號。
+
+### 5. ⚙️ 系統核心與安全授權 (`apps/core`)
+* **總覽儀表板 (`Dashboard`)**：彙整客戶、合約到期、授權、訂單待辦與硬體庫存警示。
 * **企業級 AD / LDAP 雙軌認證與 RBAC**：支援本機帳號與 AD 網域帳號登入、AD 群組對應系統角色。
 * **三資料庫熱切換與自動遷移**：支援 SQLite、PostgreSQL、MS-SQL 線上遷移與 `AutoMigrate` 自動升級。
 * **系統備份與還原**：支援後台一鍵匯出／還原資料庫與 `media/` 附件備份包。
+* **版本號管制 (`VERSION` / `CHANGELOG.md`)**：採用 SemVer 語意化版本管理，登入頁與側邊欄底部即時顯示目前版號，點擊側邊欄版號可查看完整更新歷程。
 
 ---
 
@@ -118,3 +123,20 @@ python manage.py makemigrations --check --dry-run
 # 執行自動化測試
 python manage.py test
 ```
+
+---
+
+## 🏷️ 版本號管制
+
+本專案採用 **Semantic Versioning 2.0.0 (`MAJOR.MINOR.PATCH`)** 進行版號管制：
+
+* **版號來源**：根目錄 `VERSION` 檔案（由系統 Context Processor 自動注入各頁面）。
+* **更新歷程**：根目錄 `CHANGELOG.md`，登入系統後可點擊左側邊欄底部的版本按鈕開啟「系統版本與更新歷程」彈窗檢視。
+* **升版工具**：
+  ```powershell
+  # 預覽修訂版號升級
+  python manage.py bump_version patch --dry-run
+
+  # 升級次版本並寫入 CHANGELOG.md
+  python manage.py bump_version minor --section added --note "新增功能說明"
+  ```
