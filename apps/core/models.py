@@ -18,6 +18,10 @@ class Role(models.Model):
             "can_approve_licenses": True,
             "can_approve_contracts": True,
             "can_approve_hardware": True,
+            "can_edit_orders": True,
+            "can_approve_orders": True,
+            "can_ship_orders": True,
+            "can_close_orders": True,
             "customer_scope": "all",
         },
         "sys_admin": {
@@ -32,6 +36,10 @@ class Role(models.Model):
             "can_approve_licenses": False,
             "can_approve_contracts": False,
             "can_approve_hardware": False,
+            "can_edit_orders": False,
+            "can_approve_orders": False,
+            "can_ship_orders": False,
+            "can_close_orders": False,
             "customer_scope": "all",
         },
         "customer_admin": {
@@ -46,6 +54,10 @@ class Role(models.Model):
             "can_approve_licenses": False,
             "can_approve_contracts": False,
             "can_approve_hardware": False,
+            "can_edit_orders": False,
+            "can_approve_orders": False,
+            "can_ship_orders": False,
+            "can_close_orders": False,
             "customer_scope": "all",
         },
         "license_admin": {
@@ -60,11 +72,15 @@ class Role(models.Model):
             "can_approve_licenses": False,
             "can_approve_contracts": False,
             "can_approve_hardware": False,
+            "can_edit_orders": False,
+            "can_approve_orders": False,
+            "can_ship_orders": False,
+            "can_close_orders": False,
             "customer_scope": "all",
         },
         "probe_admin": {
             "name": "設備庫存管理人員",
-            "description": "專責管理硬體設備進出貨交易、借測歸還、規格主檔與供應商",
+            "description": "專責管理硬體設備進出貨交易、借測歸還、規格主檔與訂單出貨交付",
             "can_view_crm": True,
             "can_edit_customers": False,
             "can_edit_licenses": False,
@@ -74,6 +90,64 @@ class Role(models.Model):
             "can_approve_licenses": False,
             "can_approve_contracts": False,
             "can_approve_hardware": False,
+            "can_edit_orders": False,
+            "can_approve_orders": False,
+            "can_ship_orders": True,
+            "can_close_orders": False,
+            "customer_scope": "all",
+        },
+        "sales_rep": {
+            "name": "業務專員",
+            "description": "負責建立客戶報價訂單、議價調整、上傳回簽報價單送審與追蹤收款回報（業務隔離視野）",
+            "can_view_crm": True,
+            "can_edit_customers": True,
+            "can_edit_licenses": False,
+            "can_edit_products": False,
+            "can_edit_probes": False,
+            "can_manage_system": False,
+            "can_approve_licenses": False,
+            "can_approve_contracts": False,
+            "can_approve_hardware": False,
+            "can_edit_orders": True,
+            "can_approve_orders": False,
+            "can_ship_orders": False,
+            "can_close_orders": False,
+            "customer_scope": "followed",
+        },
+        "sales_manager": {
+            "name": "業務主管",
+            "description": "審核業務報價訂單、核准開立授權與保固並可協助退回或作廢異常訂單",
+            "can_view_crm": True,
+            "can_edit_customers": True,
+            "can_edit_licenses": False,
+            "can_edit_products": False,
+            "can_edit_probes": False,
+            "can_manage_system": False,
+            "can_approve_licenses": True,
+            "can_approve_contracts": True,
+            "can_approve_hardware": False,
+            "can_edit_orders": True,
+            "can_approve_orders": True,
+            "can_ship_orders": False,
+            "can_close_orders": False,
+            "customer_scope": "all",
+        },
+        "finance_admin": {
+            "name": "管理部 / 財務帳務人員",
+            "description": "專責核對客戶訂單匯款入帳憑證並將已收齊款項之訂單結案",
+            "can_view_crm": True,
+            "can_edit_customers": False,
+            "can_edit_licenses": False,
+            "can_edit_products": False,
+            "can_edit_probes": False,
+            "can_manage_system": False,
+            "can_approve_licenses": False,
+            "can_approve_contracts": False,
+            "can_approve_hardware": False,
+            "can_edit_orders": False,
+            "can_approve_orders": False,
+            "can_ship_orders": False,
+            "can_close_orders": True,
             "customer_scope": "all",
         },
         "view": {
@@ -88,6 +162,10 @@ class Role(models.Model):
             "can_approve_licenses": False,
             "can_approve_contracts": False,
             "can_approve_hardware": False,
+            "can_edit_orders": False,
+            "can_approve_orders": False,
+            "can_ship_orders": False,
+            "can_close_orders": False,
             "customer_scope": "all",
         },
         "hw_viewer": {
@@ -102,6 +180,10 @@ class Role(models.Model):
             "can_approve_licenses": False,
             "can_approve_contracts": False,
             "can_approve_hardware": False,
+            "can_edit_orders": False,
+            "can_approve_orders": False,
+            "can_ship_orders": False,
+            "can_close_orders": False,
             "customer_scope": "all",
         },
     }
@@ -123,6 +205,16 @@ class Role(models.Model):
     can_approve_licenses = models.BooleanField(default=False, verbose_name="可覆核軟體授權書")
     can_approve_contracts = models.BooleanField(default=False, verbose_name="可覆核維護保固合約")
     can_approve_hardware = models.BooleanField(default=False, verbose_name="可覆核硬體設備出庫")
+    can_edit_orders = models.BooleanField(default=False, verbose_name="可建立與編輯訂單/報價與回報收款 (業務)")
+    can_approve_orders = models.BooleanField(default=False, verbose_name="可審核訂單與核准開單 (業務主管)")
+    can_ship_orders = models.BooleanField(default=False, verbose_name="可執行訂單出貨與交付確認 (工程師)")
+    can_close_orders = models.BooleanField(default=False, verbose_name="可確認訂單款項入帳與結案 (管理部)")
+
+    # 訂單與報價流程權限開關
+    can_edit_orders = models.BooleanField(default=False, verbose_name="可建立與編輯訂單/報價與回報收款 (業務)")
+    can_approve_orders = models.BooleanField(default=False, verbose_name="可審核訂單與核准開單 (業務主管)")
+    can_ship_orders = models.BooleanField(default=False, verbose_name="可執行訂單出貨與交付確認 (工程師)")
+    can_close_orders = models.BooleanField(default=False, verbose_name="可確認訂單款項入帳與結案 (管理部)")
 
     # 客戶資料視野範圍 (Data Scope)
     customer_scope = models.CharField(
@@ -164,6 +256,14 @@ class Role(models.Model):
             labels.append("保固覆核")
         if self.can_approve_hardware:
             labels.append("硬體出庫覆核")
+        if self.can_edit_orders:
+            labels.append("訂單報價")
+        if self.can_approve_orders:
+            labels.append("訂單審核")
+        if self.can_ship_orders:
+            labels.append("訂單出貨")
+        if self.can_close_orders:
+            labels.append("收款結案")
         if not labels and self.can_view_crm:
             labels.append("一般操作查詢")
         elif not labels and not self.can_view_crm:
@@ -189,18 +289,33 @@ class Role(models.Model):
                     "can_approve_licenses": data.get("can_approve_licenses", False),
                     "can_approve_contracts": data.get("can_approve_contracts", False),
                     "can_approve_hardware": data.get("can_approve_hardware", False),
+                    "can_edit_orders": data.get("can_edit_orders", False),
+                    "can_approve_orders": data.get("can_approve_orders", False),
+                    "can_ship_orders": data.get("can_ship_orders", False),
+                    "can_close_orders": data.get("can_close_orders", False),
                     "customer_scope": data["customer_scope"],
                 },
             )
             if not created and code == "all_admin":
-                # 確保系統內建 all_admin 永遠保有覆核權限
+                # 確保系統內建 all_admin 永遠保有完整覆核與訂單流程權限
                 updated_fields = []
-                for f in ("can_approve_licenses", "can_approve_contracts", "can_approve_hardware"):
+                for f in (
+                    "can_approve_licenses",
+                    "can_approve_contracts",
+                    "can_approve_hardware",
+                    "can_edit_orders",
+                    "can_approve_orders",
+                    "can_ship_orders",
+                    "can_close_orders",
+                ):
                     if not getattr(obj, f):
                         setattr(obj, f, True)
                         updated_fields.append(f)
                 if updated_fields:
                     obj.save(update_fields=updated_fields + ["updated_at"])
+            elif not created and code == "probe_admin" and not obj.can_ship_orders:
+                obj.can_ship_orders = True
+                obj.save(update_fields=["can_ship_orders", "updated_at"])
 
 
 class UserProfile(models.Model):
@@ -210,6 +325,9 @@ class UserProfile(models.Model):
     ROLE_CUSTOMER_ADMIN = "customer_admin"
     ROLE_LICENSE_ADMIN = "license_admin"
     ROLE_PROBE = "probe_admin"
+    ROLE_SALES_REP = "sales_rep"
+    ROLE_SALES_MANAGER = "sales_manager"
+    ROLE_FINANCE = "finance_admin"
     ROLE_VIEW = "view"
     ROLE_HW_VIEWER = "hw_viewer"
     ROLE_CRM = "crm_admin"  # 相容舊版：CRM 與授權合約複合管理員
@@ -220,7 +338,10 @@ class UserProfile(models.Model):
         (ROLE_SYS_ADMIN, "CRM 系統維護人員 (管理系統 Config、軟體產品與硬體規格主檔)"),
         (ROLE_CUSTOMER_ADMIN, "客戶資料管理員 (管理客戶名冊、聯絡窗口與環境資訊)"),
         (ROLE_LICENSE_ADMIN, "授權與保固開立人員 (開立軟體授權書與維護保固合約)"),
-        (ROLE_PROBE, "設備庫存管理人員 (管理硬體設備進出貨、規格主檔與供應商)"),
+        (ROLE_PROBE, "設備庫存管理人員 (管理硬體設備進出貨、規格主檔與訂單出貨)"),
+        (ROLE_SALES_REP, "業務專員 (建立訂單報價、回報收款，僅限已關注客戶)"),
+        (ROLE_SALES_MANAGER, "業務主管 (審核業務訂單、覆核授權與保固)"),
+        (ROLE_FINANCE, "管理部 / 財務帳務人員 (核對訂單入帳並結案)"),
         (ROLE_VIEW, "系統操作 / 資源查詢人員 (查詢全系統資源、可留客戶執行軌跡)"),
         (ROLE_HW_VIEWER, "硬體設備查詢人員 (僅限查詢硬體設備庫存與資產選單)"),
         (ROLE_CUSTOM, "自訂組合 (自選模組權限 / 跨角色兼任)"),
@@ -269,6 +390,10 @@ class UserProfile(models.Model):
     can_approve_licenses = models.BooleanField(default=False, verbose_name="可覆核軟體授權書")
     can_approve_contracts = models.BooleanField(default=False, verbose_name="可覆核維護保固合約")
     can_approve_hardware = models.BooleanField(default=False, verbose_name="可覆核硬體設備出庫")
+    can_edit_orders = models.BooleanField(default=False, verbose_name="可建立與編輯訂單/報價與回報收款 (業務)")
+    can_approve_orders = models.BooleanField(default=False, verbose_name="可審核訂單與核准開單 (業務主管)")
+    can_ship_orders = models.BooleanField(default=False, verbose_name="可執行訂單出貨與交付確認 (工程師)")
+    can_close_orders = models.BooleanField(default=False, verbose_name="可確認訂單款項入帳與結案 (管理部)")
     customer_scope = models.CharField(
         max_length=20,
         choices=CUSTOMER_SCOPE_CHOICES,
@@ -308,11 +433,19 @@ class UserProfile(models.Model):
                 "can_approve_licenses": True,
                 "can_approve_contracts": True,
                 "can_approve_hardware": True,
+                "can_edit_orders": True,
+                "can_approve_orders": True,
+                "can_ship_orders": True,
+                "can_close_orders": True,
             }
         base_false_approvals = {
             "can_approve_licenses": False,
             "can_approve_contracts": False,
             "can_approve_hardware": False,
+            "can_edit_orders": False,
+            "can_approve_orders": False,
+            "can_ship_orders": False,
+            "can_close_orders": False,
         }
         if role == cls.ROLE_SYS_ADMIN:
             return {
@@ -357,6 +490,46 @@ class UserProfile(models.Model):
                 "can_edit_probes": True,
                 "can_manage_system": False,
                 **base_false_approvals,
+                "can_ship_orders": True,
+            }
+        if role == cls.ROLE_SALES_REP:
+            return {
+                "can_view_crm": True,
+                "can_edit_customers": True,
+                "can_edit_licenses": False,
+                "can_edit_products": False,
+                "can_edit_crm": False,
+                "can_edit_probes": False,
+                "can_manage_system": False,
+                **base_false_approvals,
+                "can_edit_orders": True,
+            }
+        if role == cls.ROLE_SALES_MANAGER:
+            return {
+                "can_view_crm": True,
+                "can_edit_customers": True,
+                "can_edit_licenses": False,
+                "can_edit_products": False,
+                "can_edit_crm": False,
+                "can_edit_probes": False,
+                "can_manage_system": False,
+                **base_false_approvals,
+                "can_approve_licenses": True,
+                "can_approve_contracts": True,
+                "can_edit_orders": True,
+                "can_approve_orders": True,
+            }
+        if role == cls.ROLE_FINANCE:
+            return {
+                "can_view_crm": True,
+                "can_edit_customers": False,
+                "can_edit_licenses": False,
+                "can_edit_products": False,
+                "can_edit_crm": False,
+                "can_edit_probes": False,
+                "can_manage_system": False,
+                **base_false_approvals,
+                "can_close_orders": True,
             }
         if role == cls.ROLE_HW_VIEWER:
             return {
@@ -379,6 +552,7 @@ class UserProfile(models.Model):
                 "can_edit_probes": False,
                 "can_manage_system": False,
                 **base_false_approvals,
+                "can_edit_orders": True,
             }
         if role == cls.ROLE_CUSTOM:
             return {
@@ -415,6 +589,9 @@ class UserProfile(models.Model):
             cls.ROLE_CUSTOMER_ADMIN,
             cls.ROLE_LICENSE_ADMIN,
             cls.ROLE_PROBE,
+            cls.ROLE_SALES_REP,
+            cls.ROLE_SALES_MANAGER,
+            cls.ROLE_FINANCE,
             cls.ROLE_HW_VIEWER,
             cls.ROLE_CRM,
             cls.ROLE_VIEW,
@@ -429,6 +606,10 @@ class UserProfile(models.Model):
             "can_approve_licenses",
             "can_approve_contracts",
             "can_approve_hardware",
+            "can_edit_orders",
+            "can_approve_orders",
+            "can_ship_orders",
+            "can_close_orders",
         ]
         for r in standard_roles:
             r_defaults = cls.get_role_default_flags(r)
@@ -564,6 +745,46 @@ class UserProfile(models.Model):
         return self.role == self.ROLE_ALL
 
     @property
+    def has_order_edit_access(self) -> bool:
+        if self.user.is_superuser or self.user.is_staff:
+            return True
+        if self.can_edit_orders:
+            return True
+        if self.role_obj:
+            return self.role_obj.can_edit_orders
+        return self.role in [self.ROLE_ALL, self.ROLE_CRM, self.ROLE_SALES_REP, self.ROLE_SALES_MANAGER]
+
+    @property
+    def has_order_approve_access(self) -> bool:
+        if self.user.is_superuser or self.user.is_staff:
+            return True
+        if self.can_approve_orders:
+            return True
+        if self.role_obj:
+            return self.role_obj.can_approve_orders
+        return self.role in [self.ROLE_ALL, self.ROLE_SALES_MANAGER]
+
+    @property
+    def has_order_ship_access(self) -> bool:
+        if self.user.is_superuser or self.user.is_staff:
+            return True
+        if self.can_ship_orders or self.has_probe_edit_access:
+            return True
+        if self.role_obj:
+            return self.role_obj.can_ship_orders or self.role_obj.can_edit_probes
+        return self.role in [self.ROLE_ALL, self.ROLE_PROBE]
+
+    @property
+    def has_order_close_access(self) -> bool:
+        if self.user.is_superuser or self.user.is_staff:
+            return True
+        if self.can_close_orders:
+            return True
+        if self.role_obj:
+            return self.role_obj.can_close_orders
+        return self.role in [self.ROLE_ALL, self.ROLE_FINANCE]
+
+    @property
     def is_followed_only_scope(self) -> bool:
         if self.user.is_superuser or self.user.is_staff:
             return False
@@ -587,6 +808,14 @@ class UserProfile(models.Model):
                 labels.append("保固覆核")
             if self.can_approve_hardware and "硬體出庫覆核" not in labels:
                 labels.append("硬體出庫覆核")
+            if self.can_edit_orders and "訂單報價" not in labels:
+                labels.append("訂單報價")
+            if self.can_approve_orders and "訂單審核" not in labels:
+                labels.append("訂單審核")
+            if self.can_ship_orders and "訂單出貨" not in labels:
+                labels.append("訂單出貨")
+            if self.can_close_orders and "收款結案" not in labels:
+                labels.append("收款結案")
             return labels
         if self.can_edit_customers:
             labels.append("客戶資料")
@@ -604,6 +833,14 @@ class UserProfile(models.Model):
             labels.append("保固覆核")
         if self.can_approve_hardware:
             labels.append("硬體出庫覆核")
+        if self.can_edit_orders:
+            labels.append("訂單報價")
+        if self.can_approve_orders:
+            labels.append("訂單審核")
+        if self.can_ship_orders:
+            labels.append("訂單出貨")
+        if self.can_close_orders:
+            labels.append("收款結案")
         if not labels and self.can_view_crm:
             labels.append("一般操作查詢")
         elif not labels and not self.can_view_crm:
@@ -753,6 +990,52 @@ class SystemSetting(models.Model):
         default=False,
         verbose_name="啟用「硬體設備出庫」簽核覆核流程",
         help_text="開啟後，無覆核權限之人員執行正式出貨、客戶借測或合約換機出庫時，設備將預先鎖定為待審狀態，待核准後才正式出庫",
+    )
+    seller_company_name = models.CharField(
+        max_length=150,
+        blank=True,
+        default="",
+        verbose_name="報價單賣方公司全銜",
+    )
+    seller_tax_id = models.CharField(
+        max_length=30,
+        blank=True,
+        default="",
+        verbose_name="賣方統一編號",
+    )
+    seller_phone = models.CharField(
+        max_length=50,
+        blank=True,
+        default="",
+        verbose_name="賣方聯絡電話",
+    )
+    seller_address = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        verbose_name="賣方公司地址",
+    )
+    seller_bank_info = models.TextField(
+        blank=True,
+        default="",
+        verbose_name="匯款銀行帳戶資訊",
+    )
+    quotation_default_terms = models.TextField(
+        blank=True,
+        default="1. 本報價單有效期限為開立日起 30 日內有效。\n2. 客戶確認購買請於下方簽章回傳，以利安排出貨與授權開立作業。",
+        verbose_name="報價單預設條款與注意事項",
+    )
+    seller_logo = models.FileField(
+        upload_to="quotation_templates/",
+        null=True,
+        blank=True,
+        verbose_name="報價單公司 Logo 圖檔",
+    )
+    seller_stamp = models.FileField(
+        upload_to="quotation_templates/",
+        null=True,
+        blank=True,
+        verbose_name="報價單公司報價章/大小章圖檔",
     )
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <title>報價單 {{ quote.order_no }}-v{{ display_version_no }}</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 12mm 14mm;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", Arial, sans-serif;
+      background: #e2e8f0;
+      color: #0f172a;
+      margin: 0;
+      padding: 1.5rem 0 3rem 0;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .toolbar {
+      max-width: 210mm;
+      margin: 0 auto 1rem auto;
+      background: #ffffff;
+      border-radius: 10px;
+      padding: 0.75rem 1.25rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0.45rem 0.9rem;
+      border-radius: 7px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      border: 1px solid #cbd5e1;
+      background: #ffffff;
+      color: #0f172a;
+    }
+    .btn-primary {
+      background: #4f46e5;
+      border-color: #4f46e5;
+      color: #ffffff;
+    }
+    .sheet {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 16mm 16mm;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.14);
+      position: relative;
+    }
+    .header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 3px solid #1e293b;
+      padding-bottom: 12px;
+      margin-bottom: 16px;
+    }
+    .seller-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .seller-logo {
+      max-height: 54px;
+      max-width: 160px;
+      object-fit: contain;
+    }
+    .quote-title-box {
+      text-align: right;
+    }
+    .quote-title {
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: 3px;
+      color: #1e293b;
+      margin: 0;
+    }
+    .quote-subtitle {
+      font-size: 11px;
+      color: #64748b;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    .meta-grid {
+      display: grid;
+      grid-template-columns: 1.25fr 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .info-box {
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 10px 12px;
+      background: #f8fafc;
+    }
+    .info-box-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: #475569;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 4px;
+      margin-bottom: 6px;
+    }
+    table.items-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 14px;
+    }
+    table.items-table th {
+      background: #1e293b;
+      color: #ffffff;
+      padding: 7px 8px;
+      font-size: 12px;
+      text-align: left;
+      border: 1px solid #1e293b;
+    }
+    table.items-table td {
+      padding: 7px 8px;
+      border: 1px solid #cbd5e1;
+      vertical-align: top;
+      font-size: 12.5px;
+    }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .center { text-align: center; }
+    .totals-wrap {
+      display: grid;
+      grid-template-columns: 1.3fr 1fr;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    .totals-box {
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 8px 12px;
+    }
+    .total-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 3px 0;
+    }
+    .total-grand {
+      border-top: 2px solid #1e293b;
+      margin-top: 5px;
+      padding-top: 6px;
+      font-size: 15px;
+      font-weight: 800;
+      color: #0f172a;
+    }
+    .terms-box {
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-bottom: 22px;
+      font-size: 12px;
+      white-space: pre-wrap;
+    }
+    .sign-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-top: 12px;
+    }
+    .sign-box {
+      border: 1px solid #94a3b8;
+      border-radius: 6px;
+      padding: 10px 14px;
+      min-height: 115px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .seller-stamp {
+      position: absolute;
+      right: 14px;
+      bottom: 12px;
+      max-height: 76px;
+      max-width: 130px;
+      opacity: 0.9;
+      pointer-events: none;
+    }
+    @media print {
+      body { background: #ffffff; padding: 0; }
+      .toolbar { display: none !important; }
+      .sheet { box-shadow: none; width: auto; min-height: auto; padding: 0; margin: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <a href="{% url 'order-detail' order.pk %}" class="btn"><i class="fa-solid fa-arrow-left"></i> 返回訂單詳情</a>
+      <span style="font-weight: 700;">報價單預覽：{{ quote.order_no }}-v{{ display_version_no }}</span>
+      {% if is_historical_version %}
+        <span style="background: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 700;">歷史版本快照</span>
+      {% endif %}
+    </div>
+    <div style="display: flex; align-items: center; gap: 8px;">
+      {% if all_versions %}
+        <select class="btn" onchange="if(this.value) window.location.href=this.value;">
+          {% for v in all_versions %}
+            <option value="{% url 'order-quotation-version-print' order.pk v.version_no %}" {% if v.version_no == display_version_no %}selected{% endif %}>
+              檢視版次 v{{ v.version_no }} (NT$ {{ v.total_amount|floatformat:0 }})
+            </option>
+          {% endfor %}
+        </select>
+      {% endif %}
+      <button type="button" class="btn btn-primary" onclick="window.print()">
+        <i class="fa-solid fa-print"></i> 列印 / 另存為 PDF
+      </button>
+    </div>
+  </div>
+
+  <div class="sheet">
+    <!-- 賣方抬頭與單號 -->
+    <div class="header-row">
+      <div class="seller-brand">
+        {% if has_logo %}
+          <img src="{{ logo_url }}" alt="Logo" class="seller-logo">
+        {% endif %}
+        <div>
+          <div style="font-size: 18px; font-weight: 800;">{{ sys_settings.seller_company_name|default:"CRM 系統賣方公司 (請至系統設定維護賣方資訊)" }}</div>
+          <div style="font-size: 12px; color: #475569;">
+            {% if sys_settings.seller_tax_id %}統一編號：{{ sys_settings.seller_tax_id }} ｜ {% endif %}
+            {% if sys_settings.seller_phone %}電話：{{ sys_settings.seller_phone }}{% endif %}
+          </div>
+          {% if sys_settings.seller_address %}
+            <div style="font-size: 12px; color: #475569;">地址：{{ sys_settings.seller_address }}</div>
+          {% endif %}
+        </div>
+      </div>
+      <div class="quote-title-box">
+        <h1 class="quote-title">報 價 單</h1>
+        <div class="quote-subtitle">QUOTATION</div>
+      </div>
+    </div>
+
+    <!-- 買方資訊與單據資訊 -->
+    <div class="meta-grid">
+      <div class="info-box">
+        <div class="info-box-title">客戶資料 (CUSTOMER)</div>
+        <div><strong>客戶名稱：</strong>{{ quote.customer_name }}</div>
+        {% if quote.customer_tax_id %}<div><strong>統一編號：</strong>{{ quote.customer_tax_id }}</div>{% endif %}
+        <div><strong>聯絡窗口：</strong>{{ quote.contact_name|default:"-" }} {% if quote.contact_phone %}({{ quote.contact_phone }}){% endif %}</div>
+        {% if quote.contact_email %}<div><strong>電子信箱：</strong>{{ quote.contact_email }}</div>{% endif %}
+        {% if quote.customer_address %}<div><strong>聯絡地址：</strong>{{ quote.customer_address }}</div>{% endif %}
+      </div>
+      <div class="info-box">
+        <div class="info-box-title">報價單資訊 (QUOTATION INFO)</div>
+        <div><strong>報價單號：</strong><span style="font-family: monospace; font-weight: 700;">{{ quote.order_no }}-v{{ display_version_no }}</span></div>
+        <div><strong>專案主旨：</strong>{{ quote.title }}</div>
+        <div><strong>報價日期：</strong>{{ quote.quote_date|default:"-" }}</div>
+        <div><strong>有效期限：</strong>{{ quote.valid_until|default:"報價日起 30 日" }}</div>
+        <div><strong>經辦業務：</strong>{{ quote.salesperson_name|default:"-" }}</div>
+      </div>
+    </div>
+
+    <!-- 明細表 -->
+    <table class="items-table">
+      <thead>
+        <tr>
+          <th class="center" style="width: 38px;">項次</th>
+          <th style="width: 82px;">類別</th>
+          <th>品項名稱與規格說明</th>
+          <th class="center" style="width: 72px;">數量</th>
+          <th class="num" style="width: 100px;">單價 (NT$)</th>
+          <th class="num" style="width: 110px;">小計 (NT$)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in quote.items %}
+          <tr>
+            <td class="center">{{ forloop.counter }}</td>
+            <td>{{ item.item_type_display }}</td>
+            <td>
+              <div style="font-weight: 700;">{{ item.name }}</div>
+              {% if item.description %}<div style="font-size: 11.5px; color: #475569;">{{ item.description }}</div>{% endif %}
+              {% if item.start_date or item.end_date %}
+                <div style="font-size: 11.5px; color: #475569;">期間：{{ item.start_date|default:"-" }} ~ {{ item.end_date|default:"永久" }}{% if item.sla_level %} ｜ SLA: {{ item.sla_level }}{% endif %}</div>
+              {% endif %}
+            </td>
+            <td class="center">{{ item.quantity }} {{ item.unit }}</td>
+            <td class="num">{{ item.unit_price|add:0 }}</td>
+            <td class="num" style="font-weight: 700;">{{ item.line_total|add:0 }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <!-- 金額與付款資訊 -->
+    <div class="totals-wrap">
+      <div class="info-box">
+        <div class="info-box-title">付款條件與匯款資訊</div>
+        <div><strong>付款條件：</strong>{{ quote.payment_terms|default:"雙方協議約定" }}</div>
+        {% if sys_settings.seller_bank_info %}
+          <div style="margin-top: 6px; white-space: pre-wrap;"><strong>匯款帳戶：</strong><br>{{ sys_settings.seller_bank_info }}</div>
+        {% endif %}
+      </div>
+      <div class="totals-box">
+        <div class="total-row">
+          <span>合計小計：</span>
+          <span>NT$ {{ subtotal_int|floatformat:0 }}</span>
+        </div>
+        {% if discount_int > 0 %}
+        <div class="total-row" style="color: #dc2626;">
+          <span>議價折讓：</span>
+          <span>- NT$ {{ discount_int|floatformat:0 }}</span>
+        </div>
+        {% endif %}
+        <div class="total-row">
+          <span>營業稅額 ({{ quote.tax_mode_display }})：</span>
+          <span>NT$ {{ tax_int|floatformat:0 }}</span>
+        </div>
+        <div class="total-row total-grand">
+          <span>總計應付金額：</span>
+          <span>NT$ {{ total_int|floatformat:0 }}</span>
+        </div>
+        <div style="text-align: right; font-size: 11.5px; color: #475569; margin-top: 3px;">
+          新台幣：{{ total_zh_upper }}
+        </div>
+      </div>
+    </div>
+
+    <!-- 條款 -->
+    {% if quote.terms_note %}
+      <div class="terms-box"><strong>備註與報價條款：</strong>
+{{ quote.terms_note }}</div>
+    {% endif %}
+
+    <!-- 簽章回簽區 -->
+    <div class="sign-grid">
+      <div class="sign-box">
+        <div style="font-weight: 700; font-size: 12.5px;">賣方報價簽章 (Authorized Signature)</div>
+        {% if has_stamp %}
+          <img src="{{ stamp_url }}" alt="報價章" class="seller-stamp">
+        {% endif %}
+        <div style="font-size: 12px; color: #475569;">
+          經辦業務：{{ quote.salesperson_name|default:"____________" }}<br>
+          報價日期：{{ quote.quote_date|default:"____ 年 __ 月 __ 日" }}
+        </div>
+      </div>
+      <div class="sign-box">
+        <div style="font-weight: 700; font-size: 12.5px;">客戶確認購買回簽欄 (Customer Acceptance)</div>
+        <div style="font-size: 11.5px; color: #64748b;">茲確認上述報價品項、數量、金額與條款無誤，同意採購。</div>
+        <div style="font-size: 12px; color: #334155; border-top: 1px dashed #cbd5e1; padding-top: 6px;">
+          公司大小章 / 授權代表簽名：______________________<br>
+          確認日期：________ 年 ____ 月 ____ 日
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

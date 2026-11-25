@@ -133,6 +133,10 @@ class ActiveDirectoryBackend(ModelBackend):
                     "can_approve_licenses": False,
                     "can_approve_contracts": False,
                     "can_approve_hardware": False,
+                    "can_edit_orders": False,
+                    "can_approve_orders": False,
+                    "can_ship_orders": False,
+                    "can_close_orders": False,
                 }
                 for r in matched_roles:
                     r_flags = UserProfile.get_role_default_flags(r)

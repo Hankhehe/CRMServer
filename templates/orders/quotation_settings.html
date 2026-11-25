@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}報價單賣方範本設定 - CRM Server{% endblock %}
+
+{% block content %}
+<div style="max-width: 860px; margin: 0 auto; padding-bottom: 3rem;">
+  <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem;">
+    <div style="display: flex; align-items: center; gap: 1rem;">
+      <a href="{% url 'order-list' %}" class="btn btn-outline btn-sm"><i class="fa-solid fa-arrow-left"></i> 返回訂單管理</a>
+      <h1 style="font-size: 1.5rem; font-weight: 700; margin: 0;">報價單賣方資訊與範本設定</h1>
+    </div>
+  </div>
+
+  <form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="save_info">
+
+    <div class="card" style="margin-bottom: 1.5rem;">
+      <div class="card-header">
+        <div class="card-title"><i class="fa-solid fa-building" style="color: var(--primary);"></i> 賣方公司抬頭與匯款資訊</div>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem;">
+        <div class="form-group" style="grid-column: span 2;">
+          <label>{{ form.seller_company_name.label }}</label>
+          {{ form.seller_company_name }}
+        </div>
+        <div class="form-group">
+          <label>{{ form.seller_tax_id.label }}</label>
+          {{ form.seller_tax_id }}
+        </div>
+        <div class="form-group">
+          <label>{{ form.seller_phone.label }}</label>
+          {{ form.seller_phone }}
+        </div>
+        <div class="form-group" style="grid-column: 1 / -1;">
+          <label>{{ form.seller_address.label }}</label>
+          {{ form.seller_address }}
+        </div>
+        <div class="form-group" style="grid-column: 1 / -1;">
+          <label>{{ form.seller_bank_info.label }}</label>
+          {{ form.seller_bank_info }}
+        </div>
+        <div class="form-group" style="grid-column: 1 / -1;">
+          <label>{{ form.quotation_default_terms.label }}</label>
+          {{ form.quotation_default_terms }}
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom: 1.5rem;">
+      <div class="card-header">
+        <div class="card-title"><i class="fa-solid fa-stamp" style="color: var(--primary);"></i> 公司 Logo 與報價專用章圖檔</div>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem;">
+        <div>
+          <label style="font-weight: 600; display: block; margin-bottom: 0.4rem;">公司 Logo 圖檔 (PNG/JPG/WEBP/SVG)</label>
+          <input type="file" name="seller_logo" class="form-control" accept=".png,.jpg,.jpeg,.webp,.svg">
+          {% if has_logo %}
+            <div style="margin-top: 0.75rem; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; display: flex; justify-content: space-between; align-items: center;">
+              <img src="{{ logo_url }}" alt="Logo" style="max-height: 48px;">
+              <button type="submit" name="action" value="clear_logo" class="btn btn-outline btn-sm" style="color: #ef4444;" onclick="return confirm('確定移除公司 Logo？');">移除</button>
+            </div>
+          {% endif %}
+        </div>
+
+        <div>
+          <label style="font-weight: 600; display: block; margin-bottom: 0.4rem;">公司報價專用章 / 大小章圖檔 (建議去背 PNG)</label>
+          <input type="file" name="seller_stamp" class="form-control" accept=".png,.jpg,.jpeg,.webp,.svg">
+          {% if has_stamp %}
+            <div style="margin-top: 0.75rem; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; display: flex; justify-content: space-between; align-items: center;">
+              <img src="{{ stamp_url }}" alt="Stamp" style="max-height: 60px;">
+              <button type="submit" name="action" value="clear_stamp" class="btn btn-outline btn-sm" style="color: #ef4444;" onclick="return confirm('確定移除公司報價章？');">移除</button>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+      <a href="{% url 'order-list' %}" class="btn btn-outline">返回</a>
+      <button type="submit" class="btn btn-primary" style="padding: 0.65rem 1.75rem; font-weight: 600;">
+        <i class="fa-solid fa-floppy-disk"></i> 儲存報價單設定
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}

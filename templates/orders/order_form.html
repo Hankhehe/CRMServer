@@ -1,0 +1,433 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - CRM Server{% endblock %}
+
+{% block content %}
+<div style="max-width: 1180px; margin: 0 auto; padding-bottom: 3rem;">
+  <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+    <div style="display: flex; align-items: center; gap: 1rem;">
+      <a href="{% if is_edit %}{% url 'order-detail' order.pk %}{% else %}{% url 'order-list' %}{% endif %}" class="btn btn-outline btn-sm">
+        <i class="fa-solid fa-arrow-left"></i> 返回
+      </a>
+      <h1 style="font-size: 1.5rem; font-weight: 700; margin: 0;">{{ title }}</h1>
+    </div>
+  </div>
+
+  <form method="post" id="orderMainForm">
+    {% csrf_token %}
+    <input type="hidden" name="save_mode" id="id_save_mode" value="save_draft">
+
+    {% if form.errors or item_errors %}
+      <div class="card" style="border-left: 4px solid #ef4444; background: rgba(239, 68, 68, 0.08); margin-bottom: 1.5rem; padding: 1rem 1.25rem;">
+        <div style="font-weight: 700; color: #dc2626; margin-bottom: 0.35rem;">
+          <i class="fa-solid fa-circle-exclamation"></i> 請修正以下欄位或明細錯誤：
+        </div>
+        {% for field, errs in form.errors.items %}
+          {% for err in errs %}
+            <div style="color: #991b1b; font-size: 0.875rem;">• {{ err }}</div>
+          {% endfor %}
+        {% endfor %}
+        {% for err in item_errors %}
+          <div style="color: #991b1b; font-size: 0.875rem;">• {{ err }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <!-- 區塊一：訂單與買方基本資訊 -->
+    <div class="card" style="margin-bottom: 1.5rem;">
+      <div class="card-header">
+        <div class="card-title"><i class="fa-solid fa-file-signature" style="color: var(--primary);"></i> 訂單與客戶報價資訊</div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 1rem;">
+        <div class="form-group">
+          <label>{{ form.order_no.label }} <span style="color: #ef4444;">*</span></label>
+          {{ form.order_no }}
+        </div>
+        <div class="form-group" style="grid-column: span 2;">
+          <label>{{ form.title.label }} <span style="color: #ef4444;">*</span></label>
+          {{ form.title }}
+        </div>
+        <div class="form-group">
+          <label>{{ form.customer.label }} <span style="color: #ef4444;">*</span></label>
+          {{ form.customer }}
+        </div>
+        <div class="form-group">
+          <label>{{ form.contact_person.label }}</label>
+          {{ form.contact_person }}
+        </div>
+        <div class="form-group">
+          <label>{{ form.salesperson.label }}</label>
+          {{ form.salesperson }}
+        </div>
+        <div class="form-group">
+          <label>{{ form.contact_name.label }}</label>
+          {{ form.contact_name }}
+        </div>
+        <div class="form-group">
+          <label>{{ form.contact_phone.label }}</label>
+          {{ form.contact_phone }}
+        </div>
+        <div class="form-group">
+          <label>{{ form.contact_email.label }}</label>
+          {{ form.contact_email }}
+        </div>
+        <div class="form-group">
+          <label>{{ form.quote_date.label }}</label>
+          {{ form.quote_date }}
+        </div>
+        <div class="form-group">
+          <label>{{ form.valid_until.label }}</label>
+          {{ form.valid_until }}
+        </div>
+        <div class="form-group">
+          <label>{{ form.payment_terms.label }}</label>
+          {{ form.payment_terms }}
+        </div>
+      </div>
+    </div>
+
+    <!-- 區塊二：動態訂購品項明細 -->
+    <div class="card" style="margin-bottom: 1.5rem;">
+      <div class="card-header" style="flex-wrap: wrap; gap: 0.75rem;">
+        <div class="card-title"><i class="fa-solid fa-list-check" style="color: var(--primary);"></i> 訂購品項明細 (Line Items)</div>
+        <div style="display: flex; gap: 0.45rem; flex-wrap: wrap;">
+          <button type="button" class="btn btn-outline btn-sm" onclick="addItemRow('license')"><i class="fa-solid fa-certificate" style="color: #0284c7;"></i> + 軟體授權</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="addItemRow('warranty')"><i class="fa-solid fa-file-contract" style="color: #059669;"></i> + 維護保固</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="addItemRow('hardware')"><i class="fa-solid fa-server" style="color: #7c3aed;"></i> + 硬體設備</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="addItemRow('service')"><i class="fa-solid fa-wrench" style="color: #64748b;"></i> + 專業服務/其他</button>
+        </div>
+      </div>
+
+      <div id="items-container" style="display: flex; flex-direction: column; gap: 0.85rem;"></div>
+
+      <!-- 金額試算總計區 -->
+      <div style="margin-top: 1.25rem; padding-top: 1.25rem; border-top: 1px solid var(--glass-border); display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.25rem; align-items: start;">
+        <div>
+          <div class="form-group">
+            <label>{{ form.tax_mode.label }}</label>
+            {{ form.tax_mode }}
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label>{{ form.discount_amount.label }} (議價整單折讓 NT$)</label>
+            {{ form.discount_amount }}
+          </div>
+        </div>
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1rem 1.25rem;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 0.4rem; font-size: 0.92rem;">
+            <span style="color: var(--text-muted);">明細小計：</span>
+            <strong id="calc-subtotal">NT$ 0</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 0.4rem; font-size: 0.92rem;">
+            <span style="color: var(--text-muted);">議價折讓：</span>
+            <strong id="calc-discount" style="color: #dc2626;">- NT$ 0</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 0.65rem; font-size: 0.92rem;">
+            <span style="color: var(--text-muted);">營業稅額：</span>
+            <strong id="calc-tax">NT$ 0</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding-top: 0.65rem; border-top: 1px dashed #cbd5e1; font-size: 1.15rem;">
+            <span style="font-weight: 700;">應收總計金額：</span>
+            <strong id="calc-total" style="color: var(--primary);">NT$ 0</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 區塊三：條款與內部備註 -->
+    <div class="card" style="margin-bottom: 1.5rem;">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem;">
+        <div class="form-group" style="margin-bottom: 0;">
+          <label>{{ form.terms_note.label }}</label>
+          {{ form.terms_note }}
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label>{{ form.internal_note.label }}</label>
+          {{ form.internal_note }}
+        </div>
+      </div>
+    </div>
+
+    {% if is_edit %}
+    <!-- 議價跳版說明框 -->
+    <div class="card" style="margin-bottom: 1.5rem; border: 1px solid rgba(79, 70, 229, 0.25); background: rgba(79, 70, 229, 0.03);">
+      <div style="font-weight: 700; margin-bottom: 0.5rem; color: var(--primary);">
+        <i class="fa-solid fa-code-branch"></i> 報價版本留存選項（目前版次：v{{ order.current_version }}）
+      </div>
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+        • 選擇「儲存目前草稿」會直接更新當前版次草稿內容（不增加版號）。<br>
+        • 若客戶議價砍價或調整品項需留存新版報價單紀錄，請填寫修改原因後點擊「儲存並產生新版報價單 (v{{ order.current_version|add:1 }})」。
+      </p>
+      <input type="text" name="version_note" class="form-control" placeholder="若要產生新版報價單，請簡述議價或變更原因（例如：客戶砍價 5%、調整數量等）...">
+    </div>
+    {% endif %}
+
+    <div style="display: flex; justify-content: flex-end; gap: 0.85rem; flex-wrap: wrap;">
+      <a href="{% if is_edit %}{% url 'order-detail' order.pk %}{% else %}{% url 'order-list' %}{% endif %}" class="btn btn-outline">取消返回</a>
+      {% if is_edit %}
+        <button type="submit" class="btn btn-outline" onclick="document.getElementById('id_save_mode').value='save_draft'">
+          <i class="fa-solid fa-floppy-disk"></i> 儲存目前草稿 (維持 v{{ order.current_version }})
+        </button>
+        <button type="submit" class="btn btn-primary" onclick="document.getElementById('id_save_mode').value='new_version'">
+          <i class="fa-solid fa-code-branch"></i> 儲存並產生新版報價單 (v{{ order.current_version|add:1 }})
+        </button>
+      {% else %}
+        <button type="submit" class="btn btn-primary" style="padding: 0.65rem 1.75rem; font-weight: 600;">
+          <i class="fa-solid fa-floppy-disk"></i> 建立訂單與報價單 (v1)
+        </button>
+      {% endif %}
+    </div>
+  </form>
+</div>
+
+<script>
+const CUSTOMERS_CATALOG = {{ customers_json|safe }};
+const PRODUCTS_CATALOG = {{ products_json|safe }};
+const HW_MODELS_CATALOG = {{ hw_models_json|safe }};
+const INITIAL_ITEMS = {{ initial_items_json|safe }};
+
+function buildProductOptions(selectedId) {
+  let html = '<option value="">-- 請選擇軟體產品主檔 --</option>';
+  PRODUCTS_CATALOG.forEach(p => {
+    const sel = String(p.id) === String(selectedId || '') ? 'selected' : '';
+    html += `<option value="${p.id}" data-name="${escapeHtml(p.name)}" data-unit="${escapeHtml(p.unit)}" ${sel}>[${escapeHtml(p.code)}] ${escapeHtml(p.name)}</option>`;
+  });
+  return html;
+}
+
+function buildHwModelOptions(selectedId) {
+  let html = '<option value="">-- 請選擇硬體型號規格 --</option>';
+  HW_MODELS_CATALOG.forEach(m => {
+    const sel = String(m.id) === String(selectedId || '') ? 'selected' : '';
+    html += `<option value="${m.id}" data-name="${escapeHtml(m.name)}" ${sel}>${escapeHtml(m.name)} (目前在庫 ${m.available_count} 台)</option>`;
+  });
+  return html;
+}
+
+function escapeHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function addItemRow(type, data) {
+  const container = document.getElementById('items-container');
+  const d = data || {};
+  const rowType = d.item_type || type || 'license';
+
+  const row = document.createElement('div');
+  row.className = 'order-item-row';
+  row.style.cssText = 'border: 1px solid #e2e8f0; border-radius: 10px; padding: 1rem; background: #fafbfc;';
+
+  row.innerHTML = `
+    <div style="display: grid; grid-template-columns: 160px 1fr 1fr 100px 80px 130px 130px 42px; gap: 0.6rem; align-items: end;">
+      <div>
+        <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted);">品項類型</label>
+        <select name="item_type" class="form-control item-type-select" onchange="onItemTypeChange(this)">
+          <option value="license" ${rowType==='license'?'selected':''}>軟體授權</option>
+          <option value="warranty" ${rowType==='warranty'?'selected':''}>維護保固</option>
+          <option value="hardware" ${rowType==='hardware'?'selected':''}>硬體設備</option>
+          <option value="service" ${rowType==='service'?'selected':''}>專業服務/其他</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted);">品項名稱 *</label>
+        <input type="text" name="item_name" class="form-control item-name-input" value="${escapeHtml(d.name)}" placeholder="品項名稱" required>
+      </div>
+      <div>
+        <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted);">規格 / 備註說明</label>
+        <input type="text" name="item_description" class="form-control" value="${escapeHtml(d.description)}" placeholder="報價單顯示之規格/期間說明">
+      </div>
+      <div>
+        <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted);">數量 *</label>
+        <input type="number" name="item_quantity" class="form-control item-qty-input" min="1" value="${d.quantity || 1}" oninput="recalcTotals()" required>
+      </div>
+      <div>
+        <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted);">單位</label>
+        <input type="text" name="item_unit" class="form-control item-unit-input" value="${escapeHtml(d.unit || (rowType==='hardware'?'台':(rowType==='warranty'?'年':'式')))}">
+      </div>
+      <div>
+        <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted);">單價 (NT$)</label>
+        <input type="number" name="item_unit_price" class="form-control item-price-input" min="0" step="1" value="${d.unit_price !== undefined ? d.unit_price : 0}" oninput="recalcTotals()" required>
+      </div>
+      <div>
+        <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted);">小計</label>
+        <div class="item-line-total" style="font-weight: 700; color: var(--primary); padding: 0.5rem 0;">NT$ 0</div>
+      </div>
+      <div>
+        <button type="button" class="btn btn-outline btn-sm" style="color: #ef4444; border-color: #fecaca;" onclick="removeItemRow(this)" title="移除此列">
+          <i class="fa-solid fa-trash"></i>
+        </button>
+      </div>
+    </div>
+
+    <div class="item-extra-fields" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.6rem; margin-top: 0.65rem; padding-top: 0.65rem; border-top: 1px dashed #e2e8f0;">
+      <div class="field-product" style="display: none;">
+        <label style="font-size: 0.74rem; color: var(--text-muted);">綁定軟體產品主檔 *</label>
+        <select name="item_product" class="form-control" onchange="onProductSelect(this)">
+          ${buildProductOptions(d.product_id)}
+        </select>
+      </div>
+      <div class="field-lic-type" style="display: none;">
+        <label style="font-size: 0.74rem; color: var(--text-muted);">授權類型</label>
+        <select name="item_license_type" class="form-control">
+          <option value="perpetual" ${(d.license_type||'perpetual')==='perpetual'?'selected':''}>永久買斷</option>
+          <option value="subscription" ${d.license_type==='subscription'?'selected':''}>定期訂閱</option>
+          <option value="trial" ${d.license_type==='trial'?'selected':''}>測試授權</option>
+        </select>
+      </div>
+      <div class="field-hw-model" style="display: none;">
+        <label style="font-size: 0.74rem; color: var(--text-muted);">綁定硬體規格主檔 *</label>
+        <select name="item_hardware_model" class="form-control" onchange="onHwModelSelect(this)">
+          ${buildHwModelOptions(d.hardware_model_id)}
+        </select>
+      </div>
+      <div class="field-dates" style="display: none;">
+        <label style="font-size: 0.74rem; color: var(--text-muted);">起日 (授權/保固)</label>
+        <input type="date" name="item_start_date" class="form-control" value="${escapeHtml(d.start_date)}">
+      </div>
+      <div class="field-dates" style="display: none;">
+        <label style="font-size: 0.74rem; color: var(--text-muted);">訖日 (授權/保固)</label>
+        <input type="date" name="item_end_date" class="form-control" value="${escapeHtml(d.end_date)}">
+      </div>
+      <div class="field-sla" style="display: none;">
+        <label style="font-size: 0.74rem; color: var(--text-muted);">服務等級 (SLA)</label>
+        <input type="text" name="item_sla_level" class="form-control" value="${escapeHtml(d.sla_level)}" placeholder="例如: 5x8 / 7x24">
+      </div>
+    </div>
+  `;
+
+  container.appendChild(row);
+  onItemTypeChange(row.querySelector('.item-type-select'));
+  recalcTotals();
+}
+
+function onItemTypeChange(selectEl) {
+  const row = selectEl.closest('.order-item-row');
+  const val = selectEl.value;
+  row.querySelector('.field-product').style.display = val === 'license' ? 'block' : 'none';
+  row.querySelector('.field-lic-type').style.display = val === 'license' ? 'block' : 'none';
+  row.querySelector('.field-hw-model').style.display = val === 'hardware' ? 'block' : 'none';
+  row.querySelector('.field-sla').style.display = val === 'warranty' ? 'block' : 'none';
+  row.querySelectorAll('.field-dates').forEach(el => {
+    el.style.display = (val === 'license' || val === 'warranty') ? 'block' : 'none';
+  });
+  row.querySelector('.item-extra-fields').style.display = val === 'service' ? 'none' : 'grid';
+}
+
+function onProductSelect(sel) {
+  const opt = sel.options[sel.selectedIndex];
+  const row = sel.closest('.order-item-row');
+  if (opt && opt.value) {
+    const nameInput = row.querySelector('.item-name-input');
+    const unitInput = row.querySelector('.item-unit-input');
+    if (!nameInput.value.trim()) nameInput.value = opt.dataset.name || '';
+    if (opt.dataset.unit) unitInput.value = opt.dataset.unit;
+  }
+}
+
+function onHwModelSelect(sel) {
+  const opt = sel.options[sel.selectedIndex];
+  const row = sel.closest('.order-item-row');
+  if (opt && opt.value) {
+    const nameInput = row.querySelector('.item-name-input');
+    const unitInput = row.querySelector('.item-unit-input');
+    if (!nameInput.value.trim()) nameInput.value = opt.dataset.name || '';
+    unitInput.value = '台';
+  }
+}
+
+function removeItemRow(btn) {
+  const rows = document.querySelectorAll('.order-item-row');
+  if (rows.length <= 1) {
+    alert('訂單至少需保留一列品項明細。');
+    return;
+  }
+  btn.closest('.order-item-row').remove();
+  recalcTotals();
+}
+
+function recalcTotals() {
+  let subtotal = 0;
+  document.querySelectorAll('.order-item-row').forEach(row => {
+    const qty = parseInt(row.querySelector('.item-qty-input').value || '0', 10) || 0;
+    const price = parseInt(row.querySelector('.item-price-input').value || '0', 10) || 0;
+    const lineTotal = Math.max(0, qty * price);
+    subtotal += lineTotal;
+    row.querySelector('.item-line-total').textContent = 'NT$ ' + lineTotal.toLocaleString();
+  });
+
+  const discount = Math.max(0, parseInt(document.getElementById('id_discount_amount').value || '0', 10) || 0);
+  const net = Math.max(0, subtotal - discount);
+  const taxMode = document.getElementById('id_tax_mode').value;
+
+  let tax = 0;
+  let total = net;
+  if (taxMode === 'tax_exclusive') {
+    tax = Math.round(net * 0.05);
+    total = net + tax;
+  } else if (taxMode === 'tax_inclusive') {
+    total = net;
+    tax = total - Math.round(total / 1.05);
+  }
+
+  document.getElementById('calc-subtotal').textContent = 'NT$ ' + subtotal.toLocaleString();
+  document.getElementById('calc-discount').textContent = '- NT$ ' + discount.toLocaleString();
+  document.getElementById('calc-tax').textContent = 'NT$ ' + tax.toLocaleString();
+  document.getElementById('calc-total').textContent = 'NT$ ' + total.toLocaleString();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  const custSelect = document.getElementById('id_customer');
+  const cpSelect = document.getElementById('id_contact_person');
+  const cName = document.getElementById('id_contact_name');
+  const cPhone = document.getElementById('id_contact_phone');
+  const cEmail = document.getElementById('id_contact_email');
+
+  if (custSelect) {
+    custSelect.addEventListener('change', function() {
+      const info = CUSTOMERS_CATALOG[this.value];
+      if (!info) return;
+      if (cpSelect) {
+        const prevVal = cpSelect.value;
+        cpSelect.innerHTML = '<option value="">-- 自行輸入或從客戶聯絡人選取 --</option>';
+        (info.contacts || []).forEach(cp => {
+          const opt = document.createElement('option');
+          opt.value = cp.id;
+          opt.textContent = cp.title ? `${cp.name} (${cp.title})` : cp.name;
+          if (cp.is_primary) opt.selected = true;
+          cpSelect.appendChild(opt);
+        });
+      }
+      cName.value = info.contact || '';
+      cPhone.value = info.phone || '';
+      cEmail.value = info.email || '';
+    });
+  }
+
+  if (cpSelect) {
+    cpSelect.addEventListener('change', function() {
+      const custInfo = CUSTOMERS_CATALOG[custSelect ? custSelect.value : ''];
+      if (!custInfo) return;
+      const found = (custInfo.contacts || []).find(x => String(x.id) === String(this.value));
+      if (found) {
+        cName.value = found.name || '';
+        if (found.phone) cPhone.value = found.phone;
+        if (found.email) cEmail.value = found.email;
+      }
+    });
+  }
+
+  document.getElementById('id_tax_mode').addEventListener('change', recalcTotals);
+  document.getElementById('id_discount_amount').addEventListener('input', recalcTotals);
+
+  if (INITIAL_ITEMS && INITIAL_ITEMS.length > 0) {
+    INITIAL_ITEMS.forEach(item => addItemRow(item.item_type, item));
+  } else {
+    addItemRow('license');
+  }
+});
+</script>
+{% endblock %}

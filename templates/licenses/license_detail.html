@@ -155,6 +155,18 @@
         </div>
       </div>
       <div style="grid-column: 1 / -1;">
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;">來源客戶訂單</div>
+        <div>
+          {% if license.source_order %}
+            <a href="{% url 'order-detail' license.source_order.pk %}" class="badge badge-shipped" style="text-decoration: none;">
+              <i class="fa-solid fa-file-invoice-dollar"></i> {{ license.source_order.order_no }} ({{ license.source_order.get_status_display }})
+            </a>
+          {% else %}
+            <span style="color: var(--text-muted); font-size: 0.85rem;">單獨手動開立 (無綁定訂單)</span>
+          {% endif %}
+        </div>
+      </div>
+      <div style="grid-column: 1 / -1;">
         <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;">簽核覆核紀錄</div>
         <div style="font-size: 0.875rem;">
           開單人員：<strong>{{ license.created_by.username|default:"系統/既有紀錄" }}</strong>

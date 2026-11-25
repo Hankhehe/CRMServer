@@ -10,6 +10,7 @@ urlpatterns = [
     path("hardware/", include("apps.hardware.urls")),
     path("probes/", include("apps.hardware.urls")),
     path("licenses/", include("apps.licenses.urls")),
+    path("orders/", include("apps.orders.urls")),
 ]
 
 if settings.DEBUG:

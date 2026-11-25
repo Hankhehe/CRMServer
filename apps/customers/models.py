@@ -357,6 +357,14 @@ class MaintenanceContract(models.Model):
     )
     reviewed_at = models.DateTimeField(null=True, blank=True, verbose_name="覆核時間")
     rejection_reason = models.TextField(blank=True, default="", verbose_name="退回原因說明")
+    source_order = models.ForeignKey(
+        "orders.Order",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="generated_contracts",
+        verbose_name="來源訂單",
+    )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="建立時間")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="最後更新")
 

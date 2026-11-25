@@ -40,6 +40,18 @@
     {% endif %}
   </div>
 
+  {% if contract and contract.source_order %}
+    <div class="card" style="border-left: 4px solid #2563eb; background: rgba(37, 99, 235, 0.06); margin-bottom: 1.5rem; padding: 0.85rem 1.15rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+      <div style="font-size: 0.9rem;">
+        <i class="fa-solid fa-file-invoice-dollar" style="color: #2563eb;"></i>
+        <strong>來源訂單：</strong>
+        <a href="{% url 'order-detail' contract.source_order.pk %}" style="font-family: monospace; font-weight: 700; color: var(--primary); text-decoration: none;">{{ contract.source_order.order_no }}</a>
+        <span class="badge {{ contract.source_order.badge_class }}" style="margin-left: 6px;">{{ contract.source_order.get_status_display }}</span>
+      </div>
+      <a href="{% url 'order-detail' contract.source_order.pk %}" class="btn btn-outline btn-sm">檢視訂單進度</a>
+    </div>
+  {% endif %}
+
   {% if contract and contract.approval_status == 'pending' %}
     <div class="card" style="border-left: 4px solid #d97706; background: rgba(245, 158, 11, 0.08); margin-bottom: 1.5rem; padding: 1rem 1.25rem;">
       <div style="font-weight: 700; color: #b45309; margin-bottom: 0.25rem;">

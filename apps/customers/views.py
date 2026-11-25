@@ -1302,6 +1302,13 @@ def customer_detail(request, pk):
     info_sections = customer.info_sections.all()
     probes = customer.hardware_devices.filter(is_deleted=False)
     licenses = customer.licenses.all()
+    from apps.orders.models import Order
+    customer_orders = list(
+        Order.objects.filter(customer=customer)
+        .select_related("salesperson")
+        .prefetch_related("payments")
+        .order_by("-created_at")
+    )
 
     hierarchy_ctx = _build_customer_hierarchy_context(request.user, customer)
     bindable_customers = []
@@ -1365,6 +1372,7 @@ def customer_detail(request, pk):
             "info_sections": info_sections,
             "probes": probes,
             "licenses": licenses,
+            "customer_orders": customer_orders,
             "activity_logs": initial_activity_page,
             "activity_total_count": activity_total_count,
             "activity_has_next": activity_has_next,

@@ -10,6 +10,11 @@
     <p style="color: var(--text-muted); font-size: 0.95rem;">即時掌握客戶關係、維護合約到期預警與 硬體設備庫存分佈</p>
   </div>
   <div style="display: flex; gap: 0.75rem;">
+    {% if can_edit_orders %}
+      <a href="{% url 'order-create' %}" class="btn btn-outline">
+        <i class="fa-solid fa-file-invoice-dollar"></i> 新增訂單報價
+      </a>
+    {% endif %}
     {% if can_edit_customers %}
       <a href="{% url 'customer-create' %}" class="btn btn-outline">
         <i class="fa-solid fa-user-plus"></i> 新增客戶
@@ -124,6 +129,78 @@
       </a>
     </div>
   </div>
+  <!-- Pending Payment Orders KPI -->
+  <div class="card" style="margin-bottom: 0;">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+      <div>
+        <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.25rem;">待收款訂單追踪</div>
+        <div style="font-size: 2rem; font-weight: 700; color: #2563eb;">{{ pending_payment_orders_count }} <span style="font-size: 0.95rem; font-weight: 500; color: var(--text-muted);">筆</span></div>
+      </div>
+      <div style="width: 48px; height: 48px; border-radius: 12px; background: rgba(37, 99, 235, 0.1); color: #2563eb; display: flex; align-items: center; justify-content: center; font-size: 1.35rem;">
+        <i class="fa-solid fa-sack-dollar"></i>
+      </div>
+    </div>
+    <div style="margin-top: 0.75rem; font-size: 0.8rem; color: var(--text-muted); display: flex; justify-content: space-between; align-items: center;">
+      <span>總額: <strong style="color: #1d4ed8;">NT$ {{ pending_payment_orders_total|floatformat:0 }}</strong></span>
+      <a href="{% url 'order-list' %}?status=pending_payment" style="color: #2563eb; text-decoration: none; font-weight: 600;">
+        追蹤收款 <i class="fa-solid fa-arrow-right" style="font-size: 0.75rem;"></i>
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- Order Workflow & Payment Tracking Alert Card -->
+<div class="card" style="margin-bottom: 1.75rem;">
+  <div class="card-header">
+    <div class="card-title">
+      <i class="fa-solid fa-file-invoice-dollar" style="color: #2563eb;"></i> 訂單流程待辦與未收款追蹤預警
+    </div>
+    <a href="{% url 'order-list' %}" class="btn btn-outline btn-sm">前往訂單管理</a>
+  </div>
+  {% if order_pipeline_alerts %}
+    <div class="table-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th>訂單單號</th>
+            <th>客戶 / 專案主旨</th>
+            <th>流程狀態</th>
+            <th>總金額 / 尚欠餘額</th>
+            <th>負責業務</th>
+            <th style="text-align: right;">處理</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ord in order_pipeline_alerts %}
+            <tr>
+              <td>
+                <a href="{% url 'order-detail' ord.pk %}" style="font-family: monospace; font-weight: 700; color: var(--primary); text-decoration: none;">{{ ord.order_no }}</a>
+              </td>
+              <td>
+                <div style="font-weight: 600;">{{ ord.title }}</div>
+                <div style="font-size: 0.78rem; color: var(--text-muted);">[{{ ord.customer.code }}] {{ ord.customer.name }}</div>
+              </td>
+              <td><span class="badge {{ ord.badge_class }}">{{ ord.get_status_display }}</span></td>
+              <td style="white-space: nowrap;">
+                <strong>NT$ {{ ord.total_amount|floatformat:0 }}</strong>
+                {% if ord.status == 'pending_payment' %}
+                  <div style="font-size: 0.75rem; color: #dc2626;">尚欠: NT$ {{ ord.unpaid_balance|floatformat:0 }}</div>
+                {% endif %}
+              </td>
+              <td>{{ ord.salesperson.get_full_name|default:ord.salesperson.username|default:"-" }}</td>
+              <td style="text-align: right;">
+                <a href="{% url 'order-detail' ord.pk %}" class="btn btn-outline btn-sm">檢視</a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div style="padding: 1.5rem; text-align: center; color: var(--text-muted);">
+      目前沒有進行中的待審核、待出貨或待收款訂單。
+    </div>
+  {% endif %}
 </div>
 
 <!-- Two Columns Grid: Alerts Section -->

@@ -207,6 +207,46 @@
           </div>
         </div>
 
+        <!-- 模組 7: 訂單報價、出貨與收款結案流程 -->
+        <div class="card" style="display: flex; flex-direction: column; justify-content: space-between; margin-bottom: 0; grid-column: 1 / -1; border: 1px solid rgba(14, 165, 233, 0.3);">
+          <div>
+            <strong style="font-size: 1rem; color: var(--text-main);"><i class="fa-solid fa-file-invoice-dollar" style="color: #0284c7; margin-right: 6px;"></i> 訂單報價、出貨與收款結案模組 (Order Workflow)</strong>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.35rem; margin-bottom: 0.75rem;">
+              依序控管「業務報價送審」→「業務主管審核開單」→「工程師檢查出貨」→「管理部確認入帳結案」完整流程。
+            </p>
+          </div>
+          <div style="padding-top: 0.75rem; border-top: 1px solid var(--glass-border); display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem;">
+            <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; margin: 0;">
+              {{ form.can_edit_orders }}
+              <div>
+                <span style="font-weight: 600; font-size: 0.9rem;">建立與編輯訂單/報價 (業務)</span>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">開立訂單、議價調版、印製報價單、上傳回簽單送審及回報收款。</div>
+              </div>
+            </label>
+            <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; margin: 0;">
+              {{ form.can_approve_orders }}
+              <div>
+                <span style="font-weight: 600; font-size: 0.9rem;">審核訂單並開立單據 (業務主管)</span>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">核准訂單並自動開立軟體授權與維護合約，或退回/作廢訂單。</div>
+              </div>
+            </label>
+            <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; margin: 0;">
+              {{ form.can_ship_orders }}
+              <div>
+                <span style="font-weight: 600; font-size: 0.9rem;">執行訂單出貨與交付 (工程師)</span>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">檢查待出貨訂單、挑選出庫硬體序號、填寫金鑰並轉為待收款。</div>
+              </div>
+            </label>
+            <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; margin: 0;">
+              {{ form.can_close_orders }}
+              <div>
+                <span style="font-weight: 600; font-size: 0.9rem;">確認款項入帳與結案 (管理部)</span>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">核對匯款水單與帳務入帳後將待收款訂單正式結案。</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
       </div>
     </div>
 
@@ -274,7 +314,11 @@
         'can_manage_system',
         'can_approve_licenses',
         'can_approve_contracts',
-        'can_approve_hardware'
+        'can_approve_hardware',
+        'can_edit_orders',
+        'can_approve_orders',
+        'can_ship_orders',
+        'can_close_orders'
       ];
       flags.forEach(function(k) {
         const cb = document.getElementById('id_' + k);
