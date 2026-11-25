@@ -28,7 +28,7 @@ from apps.core.permissions import (
     user_can_ship_orders,
     user_can_view_crm,
 )
-from apps.customers.models import Customer, CustomerFollow, MaintenanceContract
+from apps.customers.models import Customer, CustomerFollow, CustomerServiceRecord, MaintenanceContract
 from apps.hardware.models import HardwareDevice, HardwareModel
 from apps.licenses.models import CustomerLicense, Product
 from .forms import OrderAttachmentForm, OrderForm, OrderPaymentForm, QuotationSettingForm
@@ -962,6 +962,7 @@ def order_detail(request, pk):
             "items__hardware_model",
             "items__generated_license__product",
             "items__generated_contract",
+            "items__generated_service",
             "items__allocated_devices__model",
             "items__warranty_existing_licenses__product",
             "items__warranty_existing_devices__model",
@@ -1026,6 +1027,9 @@ def order_detail(request, pk):
     generated_contracts = list(
         MaintenanceContract.objects.filter(source_order=order).prefetch_related("licenses", "probes").order_by("contract_no")
     )
+    generated_services = list(
+        CustomerServiceRecord.objects.filter(source_order=order).prefetch_related("attachments").order_by("service_no")
+    )
     shipped_devices = list(
         HardwareDevice.objects.filter(source_order=order, is_deleted=False).select_related("model").order_by("code")
     )
@@ -1064,6 +1068,7 @@ def order_detail(request, pk):
             "hardware_pickers": hardware_pickers,
             "generated_licenses": generated_licenses,
             "generated_contracts": generated_contracts,
+            "generated_services": generated_services,
             "shipped_devices": shipped_devices,
             "attachment_form": attachment_form,
             "payment_form": payment_form,

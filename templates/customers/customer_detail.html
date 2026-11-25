@@ -975,6 +975,114 @@
   </div>
 </div>
 
+<!-- Professional Services / Other Records Panel -->
+<div class="card collapsible-card" id="card-services" style="margin-bottom: 1.5rem;">
+  <div class="card-header collapsible-header">
+    <div class="card-title">
+      <i class="fa-solid fa-wrench" style="color: #0d9488;"></i>
+      專業服務 / 其他紀錄
+      <span class="badge badge-secondary" style="margin-left: 6px;">{{ service_records|length }}</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 0.5rem;">
+      {% if can_edit_services %}
+        <a href="{% url 'service-record-create' customer.pk %}" class="btn btn-outline btn-sm">
+          <i class="fa-solid fa-plus"></i> 新增專業服務
+        </a>
+      {% endif %}
+      <button type="button" class="card-collapse-btn" aria-label="收合/展開" title="收合/展開" aria-expanded="true">
+        <i class="fa-solid fa-chevron-up"></i>
+      </button>
+    </div>
+  </div>
+  <div class="card-body">
+    {% if service_records %}
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>服務單號</th>
+              <th>項目名稱與說明</th>
+              <th>服務日期</th>
+              <th>數量 / 金額</th>
+              <th>狀態</th>
+              <th>備註 / 附件</th>
+              <th>來源訂單</th>
+              <th style="text-align: right;">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for svc in service_records %}
+              <tr>
+                <td>
+                  <a href="{% url 'service-record-update' svc.pk %}" style="font-family: monospace; font-weight: 700; color: var(--primary); text-decoration: none;">
+                    {{ svc.service_no }}
+                  </a>
+                </td>
+                <td>
+                  <div style="font-weight: 600;">{{ svc.name }}</div>
+                  {% if svc.description %}<div style="font-size: 0.78rem; color: var(--text-muted);">{{ svc.description }}</div>{% endif %}
+                </td>
+                <td style="white-space: nowrap; font-size: 0.85rem;">
+                  <div>{{ svc.service_date|date:"Y-m-d"|default:"-" }}</div>
+                  {% if svc.completed_at %}
+                    <div style="font-size: 0.74rem; color: #059669;">完工: {{ svc.completed_at|date:"Y-m-d" }}</div>
+                  {% endif %}
+                </td>
+                <td style="white-space: nowrap; font-size: 0.85rem;">
+                  <div>{{ svc.quantity }} {{ svc.unit }}</div>
+                  {% if svc.amount is not None %}
+                    <div style="font-weight: 600; color: var(--primary);">NT$ {{ svc.amount|floatformat:0 }}</div>
+                  {% endif %}
+                </td>
+                <td>
+                  <span class="badge {{ svc.badge_class }}">{{ svc.get_status_display }}</span>
+                </td>
+                <td style="font-size: 0.82rem; max-width: 240px;">
+                  {% if svc.note %}<div style="color: var(--text-main); white-space: pre-wrap; word-break: break-word;">{{ svc.note|truncatechars:60 }}</div>{% endif %}
+                  {% with att_cnt=svc.attachments.all|length %}
+                    {% if att_cnt > 0 %}
+                      <div style="margin-top: 3px;">
+                        <a href="{% url 'service-record-update' svc.pk %}" class="badge badge-secondary" style="text-decoration: none;">
+                          <i class="fa-solid fa-paperclip"></i> {{ att_cnt }} 個附件
+                        </a>
+                      </div>
+                    {% elif not svc.note %}
+                      <span style="color: var(--text-muted);">-</span>
+                    {% endif %}
+                  {% endwith %}
+                </td>
+                <td style="white-space: nowrap;">
+                  {% if svc.source_order %}
+                    <a href="{% url 'order-detail' svc.source_order.pk %}" style="font-family: monospace; font-size: 0.82rem; font-weight: 600; color: var(--primary); text-decoration: none;">
+                      {{ svc.source_order.order_no }}
+                    </a>
+                  {% else %}
+                    <span style="font-size: 0.8rem; color: var(--text-muted);">手動建立</span>
+                  {% endif %}
+                </td>
+                <td style="text-align: right; white-space: nowrap;">
+                  <a href="{% url 'service-record-update' svc.pk %}" class="btn btn-outline btn-sm">
+                    <i class="fa-solid fa-pen-to-square"></i> 管理 / 附件
+                  </a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div style="padding: 1.75rem; text-align: center; color: var(--text-muted);">
+        <p style="margin-bottom: 0.65rem;">此客戶尚無專業服務 / 其他紀錄</p>
+        {% if can_edit_services %}
+          <a href="{% url 'service-record-create' customer.pk %}" class="btn btn-outline btn-sm">
+            <i class="fa-solid fa-plus"></i> 新增第一筆專業服務紀錄
+          </a>
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+</div>
+
 <!-- Customer Activity & Execution Trajectory Card -->
 <div class="card collapsible-card" id="activity-section">
   <div class="card-header collapsible-header" style="flex-wrap: wrap; gap: 0.75rem;">

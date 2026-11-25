@@ -566,6 +566,8 @@
                 {% else %}
                   <div style="color: var(--text-muted);">保固天數: {{ item.warranty_days }} 天 (審核通過後起算)</div>
                 {% endif %}
+              {% elif item.item_type == 'service' and item.start_date %}
+                <div style="color: var(--text-muted);">服務日期: {{ item.start_date|date:"Y-m-d" }}</div>
               {% elif item.start_date or item.end_date %}
                 <div style="color: var(--text-muted);">期間: {{ item.start_date|date:"Y-m-d"|default:"-" }} ~ {{ item.end_date|date:"Y-m-d"|default:"永久" }}</div>
               {% endif %}
@@ -582,10 +584,10 @@
 </div>
 
 <!-- 關聯自動開立單據與出貨硬體資產 -->
-{% if generated_licenses or generated_contracts or shipped_devices %}
+{% if generated_licenses or generated_contracts or generated_services or shipped_devices %}
 <div class="card" style="margin-bottom: 1.5rem;">
   <div class="card-header">
-    <div class="card-title"><i class="fa-solid fa-link" style="color: #059669;"></i> 本訂單關聯產生之授權書、保固合約與出貨設備</div>
+    <div class="card-title"><i class="fa-solid fa-link" style="color: #059669;"></i> 本訂單關聯產生之授權書、保固合約、專業服務與出貨設備</div>
   </div>
   <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem;">
     {% if generated_licenses %}
@@ -627,6 +629,21 @@
                 </button>
               {% endif %}
             </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% if generated_services %}
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1rem;">
+        <div style="font-weight: 700; margin-bottom: 0.6rem; color: #0d9488;"><i class="fa-solid fa-wrench"></i> 專業服務 / 其他紀錄 ({{ generated_services|length }})</div>
+        {% for svc in generated_services %}
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.45rem 0; border-bottom: 1px dashed #e2e8f0; gap: 0.5rem;">
+            <div>
+              <a href="{% url 'service-record-update' svc.pk %}" style="font-family: monospace; font-weight: 700; color: var(--primary); text-decoration: none;">{{ svc.service_no }}</a>
+              <div style="font-size: 0.78rem; color: var(--text-muted);">{{ svc.name }}{% if svc.service_date %} ({{ svc.service_date|date:"Y-m-d" }}){% endif %}</div>
+            </div>
+            <span class="badge {{ svc.badge_class }}">{{ svc.get_status_display }}</span>
           </div>
         {% endfor %}
       </div>

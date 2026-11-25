@@ -44,4 +44,11 @@ urlpatterns = [
     # Customer Hierarchy Quick Actions
     path("<int:pk>/children/bind/", views.customer_bind_child, name="customer-bind-child"),
     path("<int:pk>/children/<int:child_pk>/unbind/", views.customer_unbind_child, name="customer-unbind-child"),
+    # Customer Professional Services / Other Records
+    path("<int:customer_pk>/services/create/", views.service_record_create, name="service-record-create"),
+    path("services/<int:pk>/edit/", views.service_record_update, name="service-record-update"),
+    path("services/<int:pk>/delete/", views.service_record_delete, name="service-record-delete"),
+    path("services/<int:service_pk>/attachments/upload/", views.service_attachment_upload, name="service-attachment-upload"),
+    path("services/attachments/<int:pk>/download/", views.service_attachment_download, name="service-attachment-download"),
+    path("services/attachments/<int:pk>/delete/", views.service_attachment_delete, name="service-attachment-delete"),
 ]

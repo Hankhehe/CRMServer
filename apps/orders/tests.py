@@ -607,3 +607,111 @@ class OrderWorkflowTestCase(TestCase):
         ct = MaintenanceContract.objects.get(source_order=order)
         self.assertIn(self.dev1, ct.probes.all())
         self.assertNotIn(dev_b, ct.probes.all())
+
+    def test_professional_service_order_lifecycle_and_customer_page_attachments(self):
+        from apps.customers.models import CustomerServiceRecord, ServiceRecordAttachment
+
+        # 1. 建立包含「專業服務/其他」且填寫服務日期的訂單
+        self.client.force_login(self.sales_user)
+        post_data = {
+            "order_no": "SO-20261125-0055",
+            "customer": self.customer.pk,
+            "title": "資安健檢與導入服務案",
+            "quote_date": "2026-11-25",
+            "valid_until": "2026-12-02",
+            "tax_mode": "tax_exclusive",
+            "discount_amount": "0",
+            "salesperson": self.sales_user.pk,
+            "item_row_uid": ["r_1"],
+            "item_type": ["service"],
+            "item_name": ["駐點導入與教育訓練"],
+            "item_description": ["含教育訓練手冊"],
+            "item_product": [""],
+            "item_license_type": [""],
+            "item_hardware_model": [""],
+            "item_start_date": ["2026-12-05"],
+            "item_end_date": [""],
+            "item_warranty_days": [""],
+            "item_warranty_order_targets": [""],
+            "item_warranty_existing_licenses": [""],
+            "item_warranty_existing_devices": [""],
+            "item_sla_level": [""],
+            "item_quantity": ["2"],
+            "item_unit": ["人天"],
+            "item_unit_price": ["15000"],
+        }
+        resp = self.client.post(reverse("order-create"), data=post_data)
+        self.assertEqual(resp.status_code, 302)
+        order = Order.objects.get(order_no="SO-20261125-0055")
+
+        # 2. 送審並由主管核准 -> 自動開立 SRV- 專業服務紀錄（待執行）
+        self.client.post(reverse("order-submit", kwargs={"pk": order.pk}), data={"no_signed_quote_reason": "客戶確認"})
+        self.client.force_login(self.manager_user)
+        self.client.post(reverse("order-approve", kwargs={"pk": order.pk}))
+
+        svc = CustomerServiceRecord.objects.get(source_order=order)
+        self.assertTrue(svc.service_no.startswith("SRV-"))
+        self.assertEqual(svc.name, "駐點導入與教育訓練")
+        self.assertEqual(svc.service_date, datetime.date(2026, 12, 5))
+        self.assertEqual(svc.status, CustomerServiceRecord.STATUS_PENDING)
+        self.assertEqual(svc.amount, Decimal("30000"))
+
+        # 3. 單一客戶頁面與訂單詳情頁皆可看見該專業服務方塊與單號
+        self.client.force_login(self.sales_user)
+        cust_resp = self.client.get(reverse("customer-detail", kwargs={"pk": self.customer.pk}))
+        self.assertEqual(cust_resp.status_code, 200)
+        self.assertContains(cust_resp, "專業服務 / 其他紀錄")
+        self.assertContains(cust_resp, svc.service_no)
+        self.assertContains(cust_resp, "駐點導入與教育訓練")
+
+        order_resp = self.client.get(reverse("order-detail", kwargs={"pk": order.pk}))
+        self.assertEqual(order_resp.status_code, 200)
+        self.assertContains(order_resp, svc.service_no)
+
+        # 4. 上傳附件並編輯備註與日期
+        att_file = SimpleUploadedFile("acceptance_report.pdf", b"%PDF-1.4 report", content_type="application/pdf")
+        up_resp = self.client.post(
+            reverse("service-attachment-upload", kwargs={"service_pk": svc.pk}),
+            data={"attachments": [att_file]},
+        )
+        self.assertEqual(up_resp.status_code, 302)
+        self.assertEqual(ServiceRecordAttachment.objects.filter(service_record=svc).count(), 1)
+        att = ServiceRecordAttachment.objects.get(service_record=svc)
+        dl_resp = self.client.get(reverse("service-attachment-download", kwargs={"pk": att.pk}))
+        self.assertEqual(dl_resp.status_code, 200)
+
+        # 5. 工程師確認交付 -> 自動標記專業服務為已完成並填入完工日
+        self.client.force_login(self.engineer_user)
+        self.client.post(reverse("order-ship", kwargs={"pk": order.pk}), data={"shipment_note": "教育訓練已完成"})
+        svc.refresh_from_db()
+        self.assertEqual(svc.status, CustomerServiceRecord.STATUS_COMPLETED)
+        self.assertIsNotNone(svc.completed_at)
+
+        # 6. 訂單作廢 -> 自動將專業服務標記為已取消
+        self.client.force_login(self.manager_user)
+        self.client.post(reverse("order-cancel", kwargs={"pk": order.pk}), data={"cancel_reason": "測試作廢"})
+        svc.refresh_from_db()
+        self.assertEqual(svc.status, CustomerServiceRecord.STATUS_CANCELLED)
+
+        # 7. 手動在客戶頁新增專業服務紀錄（附帶附件）直接生效
+        self.client.force_login(self.sales_user)
+        manual_file = SimpleUploadedFile("manual_note.txt", b"service log", content_type="text/plain")
+        create_resp = self.client.post(
+            reverse("service-record-create", kwargs={"customer_pk": self.customer.pk}),
+            data={
+                "service_no": "SRV-MANUAL-0001",
+                "name": "臨時顧問諮詢",
+                "description": "遠端架構檢視",
+                "service_date": "2026-11-25",
+                "status": CustomerServiceRecord.STATUS_IN_PROGRESS,
+                "quantity": "1",
+                "unit": "式",
+                "amount": "5000",
+                "note": "客戶臨時加購",
+                "attachments": [manual_file],
+            },
+        )
+        self.assertEqual(create_resp.status_code, 302)
+        manual_svc = CustomerServiceRecord.objects.get(service_no="SRV-MANUAL-0001")
+        self.assertEqual(manual_svc.attachments.count(), 1)
+        self.assertEqual(manual_svc.note, "客戶臨時加購")

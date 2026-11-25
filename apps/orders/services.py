@@ -8,7 +8,13 @@ from django.utils import timezone
 
 from apps.core.notification_service import notify_customer_followers, notify_order_workflow_event
 from apps.core.permissions import log_action
-from apps.customers.models import CustomerActivityLog, CustomerFollow, MaintenanceContract
+from apps.customers.models import (
+    CustomerActivityLog,
+    CustomerFollow,
+    CustomerServiceRecord,
+    MaintenanceContract,
+    generate_service_no,
+)
 from apps.hardware.models import HardwareDevice, InventoryTransaction
 from apps.licenses.models import CustomerLicense
 from .models import Order, OrderAttachment, OrderItem, OrderPayment, OrderVersion
@@ -296,6 +302,7 @@ def approve_order(
 
     created_licenses: list[CustomerLicense] = []
     created_contracts: list[MaintenanceContract] = []
+    created_services: list[CustomerServiceRecord] = []
 
     with transaction.atomic():
         items = list(
@@ -390,6 +397,29 @@ def approve_order(
                 item.save(update_fields=["generated_contract", "start_date", "end_date"])
                 created_contracts.append(ct)
 
+        # 3. 開立專業服務 / 其他紀錄
+        for item in items:
+            if item.item_type == OrderItem.TYPE_SERVICE and not item.generated_service_id:
+                svc_no = generate_service_no()
+                svc = CustomerServiceRecord.objects.create(
+                    customer=order.customer,
+                    service_no=svc_no,
+                    name=item.name,
+                    description=item.description or "",
+                    service_date=item.start_date,
+                    status=CustomerServiceRecord.STATUS_PENDING,
+                    quantity=max(int(item.quantity or 1), 1),
+                    unit=item.unit or "式",
+                    amount=item.line_total,
+                    assigned_to=order.salesperson or order.created_by,
+                    note=f"由訂單 {order.order_no} (v{order.current_version}) 核准自動開立。",
+                    source_order=order,
+                    created_by=order.salesperson or order.created_by or reviewer,
+                )
+                item.generated_service = svc
+                item.save(update_fields=["generated_service"])
+                created_services.append(svc)
+
         order.status = Order.STATUS_PENDING_SHIPMENT
         order.approved_by = reviewer
         order.approved_at = now_ts
@@ -406,11 +436,13 @@ def approve_order(
 
         lic_summary = ", ".join(l.license_no for l in created_licenses) or "無"
         ct_summary = ", ".join(c.contract_no for c in created_contracts) or "無"
+        svc_summary = ", ".join(s.service_no for s in created_services) or "無"
         detail_msg = (
             f"核准訂單：{order.order_no} ({order.title})\n"
             f"訂單總額：NT$ {int(order.total_amount):,}\n"
             f"自動開立軟體授權書：{lic_summary}\n"
             f"自動開立維護保固合約：{ct_summary}\n"
+            f"自動開立專業服務紀錄：{svc_summary}\n"
             f"目前狀態已推進為「待出貨 / 待交付」，請工程師檢查並完成出貨。"
         )
 
@@ -633,6 +665,17 @@ def confirm_order_shipment(
                     if new_key and new_key != lic.license_key:
                         lic.license_key = new_key
                         lic.save(update_fields=["license_key", "updated_at"])
+
+        # 將本訂單開立且尚未取消之專業服務紀錄自動標記為已完成
+        today_tw = now_ts.astimezone(TAIPEI_TZ).date()
+        for svc in CustomerServiceRecord.objects.filter(source_order=order).exclude(
+            status=CustomerServiceRecord.STATUS_CANCELLED
+        ):
+            if svc.status != CustomerServiceRecord.STATUS_COMPLETED:
+                svc.status = CustomerServiceRecord.STATUS_COMPLETED
+                if not svc.completed_at:
+                    svc.completed_at = today_tw
+                svc.save(update_fields=["status", "completed_at", "updated_at"])
 
         order.status = Order.STATUS_PENDING_PAYMENT
         order.shipped_by = engineer
@@ -964,6 +1007,7 @@ def cancel_order(
     now_ts = timezone.now()
     recycled_licenses = 0
     recycled_contracts = 0
+    recycled_services = 0
     returned_devices = []
 
     with transaction.atomic():
@@ -980,6 +1024,13 @@ def cancel_order(
                 ct.note = f"{ct.note}\n[來源訂單 {order.order_no} 已作廢自動終止：{reason}]".strip()
                 ct.save()
                 recycled_contracts += 1
+
+        for svc in CustomerServiceRecord.objects.filter(source_order=order):
+            if svc.status != CustomerServiceRecord.STATUS_CANCELLED:
+                svc.status = CustomerServiceRecord.STATUS_CANCELLED
+                svc.note = f"{svc.note}\n[來源訂單 {order.order_no} 已作廢自動取消：{reason}]".strip()
+                svc.save(update_fields=["status", "note", "updated_at"])
+                recycled_services += 1
 
         for dev in HardwareDevice.objects.select_for_update().filter(source_order=order, is_deleted=False):
             if dev.status == HardwareDevice.STATUS_SHIPPED and dev.customer_id == order.customer_id:

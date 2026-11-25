@@ -9,6 +9,7 @@ from .models import (
     MaintenanceContract,
     CustomerActivityLog,
     ContractProbeReplacement,
+    CustomerServiceRecord,
 )
 from apps.licenses.models import CustomerLicense
 from apps.hardware.models import HardwareDevice, HardwareDevice as Probe
@@ -497,4 +498,45 @@ class CustomerInfoSectionForm(forms.ModelForm):
                 attrs={"class": "form-control", "min": 0}
             ),
         }
+
+
+class CustomerServiceRecordForm(forms.ModelForm):
+    class Meta:
+        model = CustomerServiceRecord
+        fields = [
+            "service_no",
+            "name",
+            "description",
+            "service_date",
+            "status",
+            "completed_at",
+            "quantity",
+            "unit",
+            "amount",
+            "assigned_to",
+            "note",
+        ]
+        widgets = {
+            "service_no": forms.TextInput(attrs={"class": "form-control", "placeholder": "例如: SRV-20261125-0001"}),
+            "name": forms.TextInput(attrs={"class": "form-control", "placeholder": "例如: 資安健檢 / 系統導入教育訓練"}),
+            "description": forms.TextInput(attrs={"class": "form-control", "placeholder": "服務規格或內容簡述"}),
+            "service_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "status": forms.Select(attrs={"class": "form-control"}),
+            "completed_at": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "quantity": forms.NumberInput(attrs={"class": "form-control", "min": 1}),
+            "unit": forms.TextInput(attrs={"class": "form-control", "placeholder": "式 / 人天 / 小時"}),
+            "amount": forms.NumberInput(attrs={"class": "form-control", "min": 0, "step": 1, "placeholder": "選填"}),
+            "assigned_to": forms.Select(attrs={"class": "form-control"}),
+            "note": forms.Textarea(attrs={"class": "form-control", "rows": 4, "placeholder": "服務執行細節、交付紀錄或驗收備註..."}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from django.contrib.auth import get_user_model
+
+        User = get_user_model()
+        self.fields["assigned_to"].queryset = User.objects.filter(is_active=True).order_by("username")
+        self.fields["assigned_to"].empty_label = "-- 未指派 (選填) --"
+        self.fields["assigned_to"].required = False
+
 

@@ -1309,6 +1309,20 @@ def customer_detail(request, pk):
         .prefetch_related("payments")
         .order_by("-created_at")
     )
+    from .models import CustomerServiceRecord
+    service_records = list(
+        CustomerServiceRecord.objects.filter(customer=customer)
+        .select_related("assigned_to", "source_order", "created_by")
+        .prefetch_related("attachments")
+        .order_by("-service_date", "-created_at", "-id")
+    )
+    from apps.core.permissions import user_can_edit_orders, user_can_ship_orders
+    can_edit_services = (
+        can_edit_cust
+        or user_can_edit_orders(request.user)
+        or user_can_ship_orders(request.user)
+        or can_manage_sys
+    )
 
     hierarchy_ctx = _build_customer_hierarchy_context(request.user, customer)
     bindable_customers = []
@@ -1373,6 +1387,8 @@ def customer_detail(request, pk):
             "probes": probes,
             "licenses": licenses,
             "customer_orders": customer_orders,
+            "service_records": service_records,
+            "can_edit_services": can_edit_services,
             "activity_logs": initial_activity_page,
             "activity_total_count": activity_total_count,
             "activity_has_next": activity_has_next,
@@ -3025,6 +3041,276 @@ def customer_unbind_child(request, pk, child_pk):
             )
 
     return redirect("customer-detail", pk=pk)
+
+
+def _user_can_edit_service_records(user) -> bool:
+    from apps.core.permissions import user_can_edit_orders, user_can_ship_orders
+
+    return (
+        user_can_edit_customers(user)
+        or user_can_edit_orders(user)
+        or user_can_ship_orders(user)
+        or user_can_manage_system(user)
+    )
+
+
+@login_required
+def service_record_create(request, customer_pk):
+    customer = get_object_or_404(Customer, pk=customer_pk)
+    if not user_can_access_customer(request.user, customer) or not _user_can_edit_service_records(request.user):
+        messages.error(request, "權限不足：您沒有新增專業服務紀錄的權限。")
+        return redirect("customer-detail", pk=customer.pk)
+
+    from zoneinfo import ZoneInfo
+    from .forms import CustomerServiceRecordForm
+    from .models import CustomerServiceRecord, ServiceRecordAttachment, generate_service_no
+
+    today_tw = timezone.now().astimezone(ZoneInfo("Asia/Taipei")).date()
+
+    if request.method == "POST":
+        form = CustomerServiceRecordForm(request.POST)
+        if form.is_valid():
+            svc = form.save(commit=False)
+            svc.customer = customer
+            svc.created_by = request.user
+            if svc.status == CustomerServiceRecord.STATUS_COMPLETED and not svc.completed_at:
+                svc.completed_at = today_tw
+            svc.save()
+
+            uploaded_count = 0
+            for f in request.FILES.getlist("attachments"):
+                ServiceRecordAttachment.objects.create(
+                    service_record=svc,
+                    file=f,
+                    filename=f.name,
+                    file_size=f.size,
+                    uploaded_by=request.user,
+                )
+                uploaded_count += 1
+
+            log_action(
+                user=request.user,
+                action="新增客戶專業服務紀錄",
+                target_type="CustomerServiceRecord",
+                target_identifier=svc.service_no,
+                detail=f"客戶: {customer.name} | 項目: {svc.name} | 狀態: {svc.get_status_display()} | 附件: {uploaded_count} 個",
+                ip_address=request.META.get("REMOTE_ADDR"),
+            )
+            messages.success(request, f"已新增專業服務紀錄「{svc.service_no} - {svc.name}」。")
+            return redirect("customer-detail", pk=customer.pk)
+    else:
+        form = CustomerServiceRecordForm(
+            initial={
+                "service_no": generate_service_no(),
+                "service_date": today_tw,
+                "assigned_to": request.user.pk,
+            }
+        )
+
+    return render(
+        request,
+        "customers/service_record_form.html",
+        {
+            "form": form,
+            "customer": customer,
+            "service_record": None,
+            "attachments": [],
+            "title": f"新增專業服務 / 其他紀錄 - {customer.name}",
+            "can_edit_services": True,
+        },
+    )
+
+
+@login_required
+def service_record_update(request, pk):
+    from zoneinfo import ZoneInfo
+    from .forms import CustomerServiceRecordForm
+    from .models import CustomerServiceRecord, ServiceRecordAttachment
+
+    svc = get_object_or_404(
+        CustomerServiceRecord.objects.select_related("customer", "source_order", "assigned_to", "created_by"),
+        pk=pk,
+    )
+    customer = svc.customer
+    if not user_can_access_customer(request.user, customer):
+        messages.error(request, "權限不足：您無權檢視此客戶的專業服務紀錄。")
+        return redirect("customer-list")
+
+    can_edit = _user_can_edit_service_records(request.user)
+    today_tw = timezone.now().astimezone(ZoneInfo("Asia/Taipei")).date()
+
+    if request.method == "POST":
+        if not can_edit:
+            messages.error(request, "權限不足：您沒有編輯專業服務紀錄的權限。")
+            return redirect("service-record-update", pk=svc.pk)
+
+        form = CustomerServiceRecordForm(request.POST, instance=svc)
+        if form.is_valid():
+            updated = form.save(commit=False)
+            if updated.status == CustomerServiceRecord.STATUS_COMPLETED and not updated.completed_at:
+                updated.completed_at = today_tw
+            updated.save()
+
+            uploaded_count = 0
+            for f in request.FILES.getlist("attachments"):
+                ServiceRecordAttachment.objects.create(
+                    service_record=updated,
+                    file=f,
+                    filename=f.name,
+                    file_size=f.size,
+                    uploaded_by=request.user,
+                )
+                uploaded_count += 1
+
+            log_action(
+                user=request.user,
+                action="更新客戶專業服務紀錄",
+                target_type="CustomerServiceRecord",
+                target_identifier=updated.service_no,
+                detail=f"客戶: {customer.name} | 項目: {updated.name} | 狀態: {updated.get_status_display()} | 新增附件: {uploaded_count} 個",
+                ip_address=request.META.get("REMOTE_ADDR"),
+            )
+            messages.success(request, f"已更新專業服務紀錄「{updated.service_no}」。")
+            return redirect("service-record-update", pk=updated.pk)
+    else:
+        form = CustomerServiceRecordForm(instance=svc)
+
+    attachments = list(svc.attachments.select_related("uploaded_by").all())
+    return render(
+        request,
+        "customers/service_record_form.html",
+        {
+            "form": form,
+            "customer": customer,
+            "service_record": svc,
+            "attachments": attachments,
+            "title": f"專業服務 / 其他紀錄 - {svc.service_no}",
+            "can_edit_services": can_edit,
+        },
+    )
+
+
+@login_required
+def service_record_delete(request, pk):
+    from .models import CustomerServiceRecord
+
+    svc = get_object_or_404(CustomerServiceRecord.objects.select_related("customer"), pk=pk)
+    customer = svc.customer
+    if not user_can_access_customer(request.user, customer) or not _user_can_edit_service_records(request.user):
+        messages.error(request, "權限不足：無法刪除此專業服務紀錄。")
+        return redirect("customer-detail", pk=customer.pk)
+
+    if request.method == "POST":
+        svc_no = svc.service_no
+        svc_name = svc.name
+        for att in svc.attachments.all():
+            if att.file:
+                att.file.delete(save=False)
+        svc.delete()
+        log_action(
+            user=request.user,
+            action="刪除客戶專業服務紀錄",
+            target_type="CustomerServiceRecord",
+            target_identifier=svc_no,
+            detail=f"客戶: {customer.name} | 項目: {svc_name}",
+            ip_address=request.META.get("REMOTE_ADDR"),
+        )
+        messages.success(request, f"已刪除專業服務紀錄「{svc_no} - {svc_name}」。")
+
+    return redirect("customer-detail", pk=customer.pk)
+
+
+@login_required
+def service_attachment_upload(request, service_pk):
+    from .models import CustomerServiceRecord, ServiceRecordAttachment
+
+    svc = get_object_or_404(CustomerServiceRecord.objects.select_related("customer"), pk=service_pk)
+    if not user_can_access_customer(request.user, svc.customer) or not _user_can_edit_service_records(request.user):
+        messages.error(request, "權限不足：無法上傳專業服務附件。")
+        return redirect("service-record-update", pk=svc.pk)
+
+    if request.method == "POST":
+        files = request.FILES.getlist("attachments")
+        if not files:
+            messages.warning(request, "請選擇至少一個檔案再上傳。")
+        else:
+            for f in files:
+                ServiceRecordAttachment.objects.create(
+                    service_record=svc,
+                    file=f,
+                    filename=f.name,
+                    file_size=f.size,
+                    uploaded_by=request.user,
+                )
+            log_action(
+                user=request.user,
+                action="上傳專業服務附件",
+                target_type="CustomerServiceRecord",
+                target_identifier=svc.service_no,
+                detail=f"上傳 {len(files)} 個附件",
+                ip_address=request.META.get("REMOTE_ADDR"),
+            )
+            messages.success(request, f"已成功上傳 {len(files)} 個附件。")
+
+    return redirect("service-record-update", pk=svc.pk)
+
+
+@login_required
+def service_attachment_download(request, pk):
+    import mimetypes
+    from django.http import FileResponse, Http404
+    from .models import ServiceRecordAttachment
+
+    att = get_object_or_404(
+        ServiceRecordAttachment.objects.select_related("service_record__customer"),
+        pk=pk,
+    )
+    if not user_can_access_customer(request.user, att.service_record.customer):
+        messages.error(request, "權限不足：無法存取此附件。")
+        return redirect("customer-list")
+    if not att.file:
+        raise Http404("檔案不存在")
+
+    preview = request.GET.get("preview") == "1"
+    content_type, _ = mimetypes.guess_type(att.filename)
+    return FileResponse(
+        att.file.open("rb"),
+        as_attachment=not preview,
+        filename=att.filename,
+        content_type=content_type or "application/octet-stream",
+    )
+
+
+@login_required
+def service_attachment_delete(request, pk):
+    from .models import ServiceRecordAttachment
+
+    att = get_object_or_404(
+        ServiceRecordAttachment.objects.select_related("service_record__customer"),
+        pk=pk,
+    )
+    svc = att.service_record
+    if not user_can_access_customer(request.user, svc.customer) or not _user_can_edit_service_records(request.user):
+        messages.error(request, "權限不足：無法刪除此附件。")
+        return redirect("service-record-update", pk=svc.pk)
+
+    if request.method == "POST":
+        fname = att.filename
+        if att.file:
+            att.file.delete(save=False)
+        att.delete()
+        log_action(
+            user=request.user,
+            action="刪除專業服務附件",
+            target_type="CustomerServiceRecord",
+            target_identifier=svc.service_no,
+            detail=f"刪除附件: {fname}",
+            ip_address=request.META.get("REMOTE_ADDR"),
+        )
+        messages.success(request, f"已刪除附件「{fname}」。")
+
+    return redirect("service-record-update", pk=svc.pk)
+
 
 
 

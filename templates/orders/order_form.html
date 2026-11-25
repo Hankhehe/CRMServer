@@ -307,11 +307,11 @@ function addItemRow(type, data) {
           ${buildHwModelOptions(d.hardware_model_id)}
         </select>
       </div>
-      <div class="field-dates" style="display: none;">
-        <label style="font-size: 0.74rem; color: var(--text-muted);">起日 (授權)</label>
+      <div class="field-start-date" style="display: none;">
+        <label class="label-start-date" style="font-size: 0.74rem; color: var(--text-muted);">起日 (授權)</label>
         <input type="date" name="item_start_date" class="form-control" value="${escapeHtml(d.start_date)}">
       </div>
-      <div class="field-dates" style="display: none;">
+      <div class="field-end-date" style="display: none;">
         <label style="font-size: 0.74rem; color: var(--text-muted);">訖日 (授權)</label>
         <input type="date" name="item_end_date" class="form-control" value="${escapeHtml(d.end_date)}">
       </div>
@@ -388,14 +388,18 @@ function onItemTypeChange(selectEl) {
   row.querySelector('.field-product').style.display = val === 'license' ? 'block' : 'none';
   row.querySelector('.field-lic-type').style.display = val === 'license' ? 'block' : 'none';
   row.querySelector('.field-hw-model').style.display = val === 'hardware' ? 'block' : 'none';
-  row.querySelector('.field-dates').style.display = val === 'license' ? 'block' : 'none';
-  row.querySelectorAll('.field-dates').forEach(el => {
-    el.style.display = val === 'license' ? 'block' : 'none';
-  });
+  const startWrap = row.querySelector('.field-start-date');
+  const endWrap = row.querySelector('.field-end-date');
+  const startLabel = row.querySelector('.label-start-date');
+  startWrap.style.display = (val === 'license' || val === 'service') ? 'block' : 'none';
+  endWrap.style.display = val === 'license' ? 'block' : 'none';
+  if (startLabel) {
+    startLabel.textContent = val === 'service' ? '服務日期 (選填)' : '起日 (授權)';
+  }
   row.querySelector('.field-warranty-days').style.display = val === 'warranty' ? 'block' : 'none';
   row.querySelector('.field-sla').style.display = val === 'warranty' ? 'block' : 'none';
   row.querySelector('.field-warranty-targets').style.display = val === 'warranty' ? 'block' : 'none';
-  row.querySelector('.item-extra-fields').style.display = val === 'service' ? 'none' : 'grid';
+  row.querySelector('.item-extra-fields').style.display = 'grid';
 
   applyNameUnitLock(row, val);
 

@@ -737,3 +737,169 @@ class CustomerFollow(models.Model):
         return f"{self.user.username} -> {self.customer.name}"
 
 
+def generate_service_no() -> str:
+    """產生唯一專業服務單號，格式: SRV-YYYYMMDD-XXXX"""
+    from zoneinfo import ZoneInfo
+
+    today_str = timezone.now().astimezone(ZoneInfo("Asia/Taipei")).strftime("%Y%m%d")
+    prefix = f"SRV-{today_str}-"
+    existing = CustomerServiceRecord.objects.filter(service_no__startswith=prefix).values_list(
+        "service_no", flat=True
+    )
+    max_seq = 0
+    for code in existing:
+        tail = code[len(prefix):]
+        if tail.isdigit():
+            max_seq = max(max_seq, int(tail))
+    return f"{prefix}{max_seq + 1:04d}"
+
+
+class CustomerServiceRecord(models.Model):
+    STATUS_PENDING = "pending"
+    STATUS_IN_PROGRESS = "in_progress"
+    STATUS_COMPLETED = "completed"
+    STATUS_CANCELLED = "cancelled"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "待執行"),
+        (STATUS_IN_PROGRESS, "進行中"),
+        (STATUS_COMPLETED, "已完成"),
+        (STATUS_CANCELLED, "已取消"),
+    ]
+
+    customer = models.ForeignKey(
+        Customer,
+        on_delete=models.CASCADE,
+        related_name="service_records",
+        verbose_name="所屬客戶",
+    )
+    service_no = models.CharField(
+        max_length=50,
+        unique=True,
+        default=generate_service_no,
+        verbose_name="服務單號",
+    )
+    name = models.CharField(max_length=150, verbose_name="服務項目名稱")
+    description = models.CharField(
+        max_length=300,
+        blank=True,
+        default="",
+        verbose_name="規格 / 服務內容說明",
+    )
+    service_date = models.DateField(null=True, blank=True, verbose_name="服務日期")
+    completed_at = models.DateField(null=True, blank=True, verbose_name="實際完工日期")
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_PENDING,
+        verbose_name="執行狀態",
+    )
+    quantity = models.PositiveIntegerField(default=1, verbose_name="數量")
+    unit = models.CharField(max_length=20, default="式", verbose_name="單位")
+    amount = models.DecimalField(
+        max_digits=14,
+        decimal_places=0,
+        null=True,
+        blank=True,
+        verbose_name="服務金額",
+    )
+    assigned_to = models.ForeignKey(
+        "auth.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="assigned_service_records",
+        verbose_name="負責 / 執行同仁",
+    )
+    note = models.TextField(blank=True, default="", verbose_name="備註說明")
+    source_order = models.ForeignKey(
+        "orders.Order",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="generated_services",
+        verbose_name="來源訂單",
+    )
+    created_by = models.ForeignKey(
+        "auth.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="created_service_records",
+        verbose_name="建立人員",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="建立時間")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="最後更新")
+
+    class Meta:
+        ordering = ["-service_date", "-created_at", "-id"]
+        verbose_name = "客戶專業服務紀錄"
+        verbose_name_plural = "客戶專業服務紀錄"
+
+    def __str__(self) -> str:
+        return f"{self.service_no} - {self.name} ({self.customer.name})"
+
+    @property
+    def badge_class(self) -> str:
+        mapping = {
+            self.STATUS_PENDING: "badge-loaned",
+            self.STATUS_IN_PROGRESS: "badge-repair",
+            self.STATUS_COMPLETED: "badge-available",
+            self.STATUS_CANCELLED: "badge-secondary",
+        }
+        return mapping.get(self.status, "badge-secondary")
+
+
+class ServiceRecordAttachment(models.Model):
+    service_record = models.ForeignKey(
+        CustomerServiceRecord,
+        on_delete=models.CASCADE,
+        related_name="attachments",
+        verbose_name="所屬專業服務紀錄",
+    )
+    file = models.FileField(
+        upload_to="service_records/%Y/%m/",
+        verbose_name="附件檔案",
+    )
+    filename = models.CharField(max_length=255, verbose_name="原始檔名")
+    file_size = models.PositiveIntegerField(default=0, verbose_name="檔案大小 (Bytes)")
+    uploaded_by = models.ForeignKey(
+        "auth.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        verbose_name="上傳人員",
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True, verbose_name="上傳時間")
+
+    class Meta:
+        ordering = ["-uploaded_at", "-id"]
+        verbose_name = "專業服務附件"
+        verbose_name_plural = "專業服務附件"
+
+    def __str__(self) -> str:
+        return self.filename
+
+    @property
+    def formatted_size(self) -> str:
+        if self.file_size < 1024:
+            return f"{self.file_size} B"
+        elif self.file_size < 1024 * 1024:
+            return f"{self.file_size / 1024:.1f} KB"
+        else:
+            return f"{self.file_size / (1024 * 1024):.1f} MB"
+
+    @property
+    def file_ext(self) -> str:
+        import os
+
+        return os.path.splitext(self.filename)[1].lower()
+
+    @property
+    def is_image(self) -> bool:
+        return self.file_ext in [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"]
+
+    @property
+    def is_pdf(self) -> bool:
+        return self.file_ext == ".pdf"
+
+

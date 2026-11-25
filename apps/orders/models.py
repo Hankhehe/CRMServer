@@ -405,6 +405,14 @@ class OrderItem(models.Model):
         related_name="origin_order_items",
         verbose_name="已開立維護合約",
     )
+    generated_service = models.ForeignKey(
+        "customers.CustomerServiceRecord",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="origin_order_items",
+        verbose_name="已開立專業服務紀錄",
+    )
     allocated_devices = models.ManyToManyField(
         "hardware.HardwareDevice",
         blank=True,
